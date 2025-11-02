@@ -1,2 +1,2 @@
 # execute
-Productivity system to execute better, based on goals
+Agent-first productivity system for 12-week execution cycles, inspired by quarterly planning principles
