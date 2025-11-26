@@ -5,8 +5,8 @@ import {
   Paper,
   Chip,
   LinearProgress,
+  Grid,
 } from "@mui/material";
-import Grid from "@mui/material/Grid2";
 import { Add as AddIcon } from "@mui/icons-material";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
@@ -181,7 +181,7 @@ export default async function GoalsPage() {
                 </Typography>
                 {tacticsByGoal[goal.id]?.length > 0 ? (
                   <Box component="ul" sx={{ pl: 2, m: 0 }}>
-                    {tacticsByGoal[goal.id].map((tactic) => (
+                    {tacticsByGoal[goal.id].map((tactic: Tactic) => (
                       <Box component="li" key={tactic.id} sx={{ mb: 1 }}>
                         <Typography variant="body2">
                           {tactic.title}
