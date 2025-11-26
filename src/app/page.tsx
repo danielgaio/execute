@@ -1,4 +1,5 @@
 import { Typography, Container, Box, Button } from "@mui/material";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -11,9 +12,11 @@ export default function Home() {
           Agent-First 12-Week Execution Framework
         </Typography>
         <Box sx={{ mt: 4 }}>
-          <Button variant="contained" color="primary" size="large">
-            Get Started
-          </Button>
+          <Link href="/login" passHref>
+            <Button variant="contained" color="primary" size="large">
+              Get Started
+            </Button>
+          </Link>
         </Box>
       </Box>
     </Container>
