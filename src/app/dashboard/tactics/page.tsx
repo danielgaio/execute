@@ -29,6 +29,20 @@ interface Tactic {
   } | null;
 }
 
+// Transform raw Supabase result to typed Tactic
+function toTactic(raw: Record<string, unknown>): Tactic {
+  return {
+    id: raw.id as string,
+    title: raw.title as string,
+    description: raw.description as string | null,
+    weight: raw.weight as number,
+    recurrence: raw.recurrence as string,
+    status: raw.status as string,
+    due_days: raw.due_days as number[] | null,
+    goals: raw.goals as Tactic['goals'],
+  };
+}
+
 export default async function TacticsPage() {
   const supabase = await createClient();
   const {
@@ -77,6 +91,45 @@ export default async function TacticsPage() {
 
   const goalIds = goals?.map((g) => g.id) || [];
 
+  // If no goals, don't query tactics
+  if (goalIds.length === 0) {
+    return (
+      <Box>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 4,
+          }}
+        >
+          <Box>
+            <Typography variant="h4">Tactics</Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              {activeCycle.title} - Lead Indicators
+            </Typography>
+          </Box>
+          <Link href="/dashboard/tactics/new" passHref>
+            <Button variant="contained" startIcon={<AddIcon />}>
+              New Tactic
+            </Button>
+          </Link>
+        </Box>
+        <Paper sx={{ p: 4, textAlign: "center" }}>
+          <Typography variant="h6" gutterBottom>
+            No Goals Created
+          </Typography>
+          <Typography color="text.secondary" paragraph>
+            You need to create goals before adding tactics.
+          </Typography>
+          <Link href="/dashboard/goals/new" passHref>
+            <Button variant="outlined">Create First Goal</Button>
+          </Link>
+        </Paper>
+      </Box>
+    );
+  }
+
   const { data: tactics } = await supabase
     .from("tactics")
     .select(
@@ -94,7 +147,7 @@ export default async function TacticsPage() {
       )
     `
     )
-    .in("goal_id", goalIds.length > 0 ? goalIds : ["00000000-0000-0000-0000-000000000000"])
+    .in("goal_id", goalIds)
     .order("created_at", { ascending: false });
 
   const getDaysDisplay = (dueDays: number[] | null): string => {
@@ -141,7 +194,7 @@ export default async function TacticsPage() {
             </TableHead>
             <TableBody>
               {tactics.map((tactic) => {
-                const t = tactic as unknown as Tactic;
+                const t = toTactic(tactic as Record<string, unknown>);
                 return (
                   <TableRow key={t.id}>
                     <TableCell>

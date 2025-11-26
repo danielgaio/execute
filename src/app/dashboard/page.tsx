@@ -76,10 +76,9 @@ export default async function DashboardPage() {
     let completedWeight = 0
     
     for (const instance of weeklyInstances) {
-      // Supabase returns the joined table as an object (single) when it's a FK relationship
-      // Cast through unknown first to handle the type inference issue
-      const tacticsData = instance.tactics as unknown as { weight: number } | null
-      const weight = tacticsData?.weight || 1.0
+      // Transform to our typed interface - Supabase returns joined tables as objects, not arrays
+      const tacticsObj = instance.tactics as unknown as { weight: number } | null
+      const weight = tacticsObj?.weight || 1.0
       totalWeight += weight
       if (instance.status === 'done') {
         completedWeight += weight

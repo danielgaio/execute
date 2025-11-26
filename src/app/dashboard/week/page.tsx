@@ -19,7 +19,8 @@ import { getWeekStart } from "@/utils/planning";
 import { updateInstanceStatus } from "./actions";
 import Link from "next/link";
 
-interface TacticInstance {
+// Type for the raw Supabase query result
+interface RawTacticInstance {
   id: string;
   due_date: string;
   status: string;
@@ -32,6 +33,9 @@ interface TacticInstance {
     recurrence: string;
   } | null;
 }
+
+// Transformed type for display (same structure but properly typed)
+type TacticInstance = RawTacticInstance;
 
 function getDayName(date: Date): string {
   return date.toLocaleDateString("en-US", { weekday: "short" });
@@ -99,7 +103,9 @@ export default async function WeekPage() {
     for (const instance of instances) {
       const dayStr = instance.due_date;
       if (instancesByDay[dayStr]) {
-        instancesByDay[dayStr].push(instance as unknown as TacticInstance);
+        // Cast through unknown to handle Supabase's type inference
+        const typedInstance = instance as unknown as TacticInstance;
+        instancesByDay[dayStr].push(typedInstance);
       }
     }
   }
@@ -168,7 +174,7 @@ export default async function WeekPage() {
           const isPast = dayStr < today;
 
           return (
-            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 12 / 7 }} key={dayStr}>
+            <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3, xl: 2 }} key={dayStr}>
               <Paper
                 sx={{
                   p: 2,
