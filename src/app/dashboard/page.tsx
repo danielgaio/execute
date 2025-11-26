@@ -1,5 +1,4 @@
-import { Typography, Paper, Box, Button } from '@mui/material'
-import Grid from '@mui/material/Grid2';
+import { Typography, Paper, Box, Button, Grid } from '@mui/material';
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
 import Link from 'next/link'
@@ -13,6 +12,14 @@ interface TacticInstance {
     title: string
     weight: number
   }
+}
+
+interface WeeklyInstance {
+  id: string
+  status: string
+  tactics: {
+    weight: number
+  } | null
 }
 
 export default async function DashboardPage() {
@@ -76,7 +83,7 @@ export default async function DashboardPage() {
     let totalWeight = 0
     let completedWeight = 0
     
-    weeklyInstances.forEach((instance: any) => {
+    ;(weeklyInstances as unknown as WeeklyInstance[]).forEach((instance) => {
       const weight = instance.tactics?.weight || 1.0
       totalWeight += weight
       if (instance.status === 'done') {
