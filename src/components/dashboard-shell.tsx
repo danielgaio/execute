@@ -15,7 +15,6 @@ import {
   ListItemText,
   Toolbar,
   Typography,
-  Button,
   Avatar,
   Menu,
   MenuItem,
