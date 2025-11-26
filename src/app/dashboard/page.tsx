@@ -1,4 +1,5 @@
-import { Typography, Paper, Box, Button, Grid } from '@mui/material'
+import { Typography, Paper, Box, Button } from '@mui/material'
+import Grid from '@mui/material/Grid2';
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
 import Link from 'next/link'
@@ -10,6 +11,14 @@ interface TacticInstance {
   status: string
   tactics: {
     title: string
+    weight: number
+  } | null
+}
+
+interface WeeklyInstance {
+  id: string
+  status: string
+  tactics: {
     weight: number
   } | null
 }
@@ -75,10 +84,8 @@ export default async function DashboardPage() {
     let totalWeight = 0
     let completedWeight = 0
     
-    for (const instance of weeklyInstances) {
-      // Transform to our typed interface - Supabase returns joined tables as objects, not arrays
-      const tacticsObj = instance.tactics as unknown as { weight: number } | null
-      const weight = tacticsObj?.weight || 1.0
+    ;(weeklyInstances as unknown as WeeklyInstance[]).forEach((instance) => {
+      const weight = instance.tactics?.weight || 1.0
       totalWeight += weight
       if (instance.status === 'done') {
         completedWeight += weight
