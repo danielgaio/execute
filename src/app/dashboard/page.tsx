@@ -1,7 +1,8 @@
-import { Typography, Paper, Box } from '@mui/material'
+import { Typography, Paper, Box, Button } from '@mui/material'
 import Grid from '@mui/material/Grid2';
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
+import Link from 'next/link'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -21,6 +22,15 @@ export default async function DashboardPage() {
     return <CreateOrganizationForm />
   }
 
+  // Fetch active cycle
+  const { data: activeCycle } = await supabase
+    .from('cycles')
+    .select('*')
+    .eq('org_id', memberships[0].org_id)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .single()
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -36,9 +46,25 @@ export default async function DashboardPage() {
             <Typography variant="h6" color="primary" gutterBottom>
               Current Cycle
             </Typography>
-            <Typography variant="body1">
-              No active cycle found. Start planning your next 12 weeks!
-            </Typography>
+            {activeCycle ? (
+              <Box>
+                <Typography variant="h5" gutterBottom>{activeCycle.title}</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {new Date(activeCycle.start_date).toLocaleDateString()} - {new Date(activeCycle.end_date).toLocaleDateString()}
+                </Typography>
+              </Box>
+            ) : (
+              <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <Typography variant="body1" paragraph>
+                  No active cycle found. Start planning your next 12 weeks!
+                </Typography>
+                <Link href="/dashboard/cycles/new" passHref>
+                  <Button variant="contained" size="small">
+                    Plan New Cycle
+                  </Button>
+                </Link>
+              </Box>
+            )}
           </Paper>
         </Grid>
         <Grid size={{ xs: 12, md: 6, lg: 4 }}>
