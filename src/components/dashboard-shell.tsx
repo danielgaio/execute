@@ -27,6 +27,7 @@ import {
   Visibility as VisionIcon,
   Settings as SettingsIcon,
   Person as PersonIcon,
+  CalendarViewWeek as WeekIcon,
 } from "@mui/icons-material";
 import { logout } from "@/app/dashboard/actions";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,7 @@ export default function DashboardShell({
 
   const menuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
+    { text: "Week", icon: <WeekIcon />, path: "/dashboard/week" },
     { text: "Vision", icon: <VisionIcon />, path: "/dashboard/vision" },
     { text: "Goals", icon: <GoalsIcon />, path: "/dashboard/goals" },
     { text: "Tactics", icon: <TacticsIcon />, path: "/dashboard/tactics" },

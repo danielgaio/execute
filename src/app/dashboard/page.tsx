@@ -1,4 +1,5 @@
-import { Typography, Paper, Box, Button, Grid } from '@mui/material';
+import { Typography, Paper, Box, Button } from '@mui/material'
+import Grid from '@mui/material/Grid2';
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
 import Link from 'next/link'
@@ -11,7 +12,7 @@ interface TacticInstance {
   tactics: {
     title: string
     weight: number
-  }
+  } | null
 }
 
 interface WeeklyInstance {
@@ -89,7 +90,7 @@ export default async function DashboardPage() {
       if (instance.status === 'done') {
         completedWeight += weight
       }
-    })
+    }
 
     if (totalWeight > 0) {
       weeklyScore = Math.round((completedWeight / totalWeight) * 100)
