@@ -1,7 +1,26 @@
 import { Typography, Paper, Box } from '@mui/material'
 import Grid from '@mui/material/Grid2';
+import { createClient } from '@/utils/supabase/server'
+import CreateOrganizationForm from './organizations/create-form'
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return null
+
+  // Check if user belongs to any organization
+  const { data: memberships } = await supabase
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+
+  const hasOrganization = memberships && memberships.length > 0
+
+  if (!hasOrganization) {
+    return <CreateOrganizationForm />
+  }
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
