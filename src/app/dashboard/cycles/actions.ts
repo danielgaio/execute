@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { embeddingService } from '@/lib/agent/embedding-service'
 
 export async function createCycle(formData: FormData) {
   const supabase = await createClient()
@@ -28,7 +29,7 @@ export async function createCycle(formData: FormData) {
     return { error: 'No organization found' }
   }
 
-  const { error } = await supabase
+  const { data: cycle, error } = await supabase
     .from('cycles')
     .insert({
       org_id: membership.org_id,
@@ -38,9 +39,19 @@ export async function createCycle(formData: FormData) {
       end_date: endDate,
       status: 'active'
     })
+    .select()
+    .single()
 
   if (error) {
     return { error: error.message }
+  }
+
+  // Index the cycle for RAG
+  try {
+    await embeddingService.indexCycle(supabase, cycle, membership.org_id)
+  } catch (err) {
+    console.error('Failed to index cycle:', err)
+    // Don't fail the request if indexing fails
   }
 
   revalidatePath('/dashboard')

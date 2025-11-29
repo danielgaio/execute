@@ -9,6 +9,7 @@ import type { AgentTool, ToolContext, ToolResult } from "./types";
 import { toolToOpenAIFunction } from "./types";
 import { queryTools } from "./tools/query-tools";
 import { actionTools } from "./tools/action-tools";
+import { embeddingService } from "./embedding-service";
 
 /**
  * System prompt that defines the agent's personality and behavior
@@ -124,9 +125,35 @@ export class AgentService {
   }> {
     const { messages, context, maxIterations = 5 } = params;
 
-    // Add system prompt
+    // Retrieve relevant context using RAG
+    let contextMessage = "";
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+
+    if (lastUserMessage && typeof lastUserMessage.content === "string" && context.orgId) {
+      try {
+        const relevantDocs = await embeddingService.searchEmbeddings(
+          context.supabase,
+          lastUserMessage.content,
+          context.orgId
+        );
+
+        if (relevantDocs.length > 0) {
+          contextMessage = `
+Here is some relevant context from the user's plans:
+${relevantDocs
+  .map((doc) => `--- [${doc.metadata.entity_type}] ${doc.metadata.title || "Untitled"} ---\n${doc.content}`)
+  .join("\n\n")}
+`;
+        }
+      } catch (error) {
+        console.error("RAG retrieval failed:", error);
+        // Continue without context if RAG fails
+      }
+    }
+
+    // Add system prompt and context
     const fullMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: SYSTEM_PROMPT + contextMessage },
       ...messages,
     ];
 

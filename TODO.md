@@ -4,8 +4,8 @@
 
 ### 1. AI Agent Core Infrastructure (Agent-First Foundation)
 
-- [ ] Set up pgvector extension and embedding pipeline for all user content (vision, goals, tactics, WPR notes, conversations)
-- [ ] Build RAG retrieval system with RLS-aware filtering for multi-tenant context
+- [x] Set up pgvector extension and embedding pipeline for all user content (vision, goals, tactics)
+- [x] Build RAG retrieval system with RLS-aware filtering for multi-tenant context
 - [ ] Design agent tool architecture: query tools (read operations), action tools (write with confirmation), analysis tools
 - [ ] Implement agent chat UI as primary interface (persistent right-side panel, keyboard-accessible, mobile-responsive)
 - [ ] Create conversation history storage with context window management and memory persistence

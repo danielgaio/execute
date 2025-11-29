@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { generateTacticInstancesForWeek, getWeekStart } from "@/utils/planning";
+import { embeddingService } from "@/lib/agent/embedding-service";
 
 export async function createTactic(formData: FormData) {
   const supabase = await createClient();
@@ -59,6 +60,13 @@ export async function createTactic(formData: FormData) {
   if (error) {
     console.error("Error creating tactic:", error);
     throw new Error("Failed to create tactic");
+  }
+
+  // Index the tactic for RAG
+  try {
+    await embeddingService.indexTactic(supabase, tactic, membership.org_id);
+  } catch (err) {
+    console.error("Failed to index tactic:", err);
   }
 
   // Generate instances for current week

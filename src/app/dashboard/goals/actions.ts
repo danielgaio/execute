@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { embeddingService } from '@/lib/agent/embedding-service'
 
 export async function createGoal(formData: FormData) {
   const supabase = await createClient()
@@ -42,7 +43,7 @@ export async function createGoal(formData: FormData) {
     return { error: 'No active cycle found. Please create a cycle first.' }
   }
 
-  const { error } = await supabase
+  const { data: goal, error } = await supabase
     .from('goals')
     .insert({
       org_id: membership.org_id,
@@ -56,9 +57,18 @@ export async function createGoal(formData: FormData) {
       target_date: activeCycle.end_date, // Default to cycle end date
       status: 'on_track'
     })
+    .select()
+    .single()
 
   if (error) {
     return { error: error.message }
+  }
+
+  // Index the goal for RAG
+  try {
+    await embeddingService.indexGoal(supabase, goal, membership.org_id)
+  } catch (err) {
+    console.error('Failed to index goal:', err)
   }
 
   revalidatePath('/dashboard/goals')

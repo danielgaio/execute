@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
+import { embeddingService } from '@/lib/agent/embedding-service'
 
 export async function saveVision(formData: FormData) {
   const supabase = await createClient()
@@ -33,9 +34,11 @@ export async function saveVision(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
+  let visionId = existingVision?.id
+
   if (existingVision) {
     // Update existing vision with new version
-    const { error } = await supabase
+    const { data: updatedVision, error } = await supabase
       .from('visions')
       .update({
         content_md: content,
@@ -43,13 +46,22 @@ export async function saveVision(formData: FormData) {
         updated_at: new Date().toISOString()
       })
       .eq('id', existingVision.id)
+      .select()
+      .single()
 
     if (error) {
       return { error: error.message }
     }
+    
+    // Index updated vision
+    try {
+      await embeddingService.indexVision(supabase, updatedVision, membership.org_id)
+    } catch (err) {
+      console.error('Failed to index vision:', err)
+    }
   } else {
     // Create new vision
-    const { error } = await supabase
+    const { data: newVision, error } = await supabase
       .from('visions')
       .insert({
         org_id: membership.org_id,
@@ -57,9 +69,18 @@ export async function saveVision(formData: FormData) {
         content_md: content,
         version: 1
       })
+      .select()
+      .single()
 
     if (error) {
       return { error: error.message }
+    }
+    
+    // Index new vision
+    try {
+      await embeddingService.indexVision(supabase, newVision, membership.org_id)
+    } catch (err) {
+      console.error('Failed to index vision:', err)
     }
   }
 
