@@ -39,6 +39,7 @@ export default function AgentChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change
@@ -92,42 +93,27 @@ export default function AgentChat() {
     setError(null);
 
     try {
-      // Convert messages to OpenAI format
-      const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] =
-        messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        }));
-
-      apiMessages.push({
-        role: "user",
-        content: input,
-      });
-
       const response = await fetch("/api/agent/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({
+          message: userMessage.content,
+          conversationId,
+        }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = (await response.json()) as {
-          error: string;
-          details?: string;
-        };
-        throw new Error(errorData.error || "Failed to send message");
+        throw new Error(data.error || "Failed to send message");
       }
 
-      const data = (await response.json()) as {
-        message: string;
-        toolCalls?: {
-          name: string;
-          args: Record<string, unknown>;
-          result: { success: boolean };
-        }[];
-      };
+      // Update conversation ID if returned (for new conversations)
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
 
       const assistantMessage: Message = {
         role: "assistant",
@@ -138,12 +124,14 @@ export default function AgentChat() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
       console.error("Chat error:", err);
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
+
+
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

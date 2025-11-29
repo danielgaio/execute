@@ -7,15 +7,18 @@
 - [x] Set up pgvector extension and embedding pipeline for all user content (vision, goals, tactics)
 - [x] Build RAG retrieval system with RLS-aware filtering for multi-tenant context
 - [ ] Design agent tool architecture: query tools (read operations), action tools (write with confirmation), analysis tools
-- [ ] Implement agent chat UI as primary interface (persistent right-side panel, keyboard-accessible, mobile-responsive)
-- [ ] Create conversation history storage with context window management and memory persistence
-- [ ] Build agent context builder that assembles relevant cycles, goals, tactics, scores for each query
+- [x] Implement agent chat UI as primary interface (persistent right-side panel, keyboard-accessible, mobile-responsive)
+- [x] Create conversation history storage with context window management and memory persistence
+- [x] Build agent context builder that assembles relevant cycles, goals, tactics, scores for each query
 
 ### 2. Agent-Assisted Planning & Execution Tools
 
-- [ ] Implement agent planning tools: `create_cycle`, `define_goal`, `add_tactic`, `suggest_tactics_for_goal`, `review_plan_feasibility`
-- [ ] Build agent query tools: `list_due_items`, `query_scores`, `summarize_progress`, `explain_status`, `compare_cycles`, `find_blockers`
-- [ ] Create agent action tools (with confirmation): `assign_tactic`, `defer_task`, `mark_complete`, `reschedule_tactic`, `update_weight`
+- [x] Implement agent planning tools: `create_cycle`, `define_goal`, `add_tactic`
+- [ ] Implement advanced planning tools: `suggest_tactics_for_goal`, `review_plan_feasibility`
+- [x] Build agent query tools: `list_due_items`, `query_scores`, `summarize_progress`
+- [ ] Build advanced query tools: `explain_status`, `compare_cycles`, `find_blockers`
+- [x] Create agent action tools (with confirmation): `assign_tactic`, `defer_task`, `mark_complete`
+- [ ] Create advanced action tools: `reschedule_tactic`, `update_weight`
 - [ ] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
 - [ ] Build agent-guided wizard that conversationally walks users through 12-week cycle planning

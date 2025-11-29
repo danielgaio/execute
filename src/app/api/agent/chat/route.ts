@@ -6,13 +6,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { agentService } from "@/lib/agent/agent-service";
+import { conversationService } from "@/lib/agent/conversation-service";
 import type OpenAI from "openai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface ChatRequest {
-  messages: OpenAI.Chat.ChatCompletionMessageParam[];
+  message: string;
+  conversationId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -48,18 +50,55 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = (await request.json()) as ChatRequest;
-    const { messages } = body;
+    const { message: userContent, conversationId: requestedConversationId } = body;
 
-    if (!messages || !Array.isArray(messages)) {
+    if (!userContent) {
       return NextResponse.json(
-        { error: "Invalid request: messages array required" },
+        { error: "Invalid request: message required" },
         { status: 400 }
       );
     }
 
-    // Process message with agent
+    // 1. Get or create conversation
+    let conversationId = requestedConversationId;
+    let history: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+    if (conversationId) {
+      // Verify ownership
+      const conversation = await conversationService.getConversation(
+        supabase,
+        conversationId
+      );
+      if (!conversation || conversation.user_id !== user.id) {
+        // If not found or not owned, create new one (or error out? creating new is safer for UX)
+        conversationId = undefined;
+      } else {
+        // Load history
+        history = await conversationService.getMessages(supabase, conversationId);
+      }
+    }
+
+    if (!conversationId) {
+      const newConv = await conversationService.createConversation(
+        supabase,
+        user.id,
+        membership.org_id,
+        userContent.substring(0, 50) + "..."
+      );
+      conversationId = newConv.id;
+    }
+
+    // 2. Save user message
+    const userMessage: OpenAI.Chat.ChatCompletionMessageParam = {
+      role: "user",
+      content: userContent,
+    };
+    
+    await conversationService.addMessage(supabase, conversationId!, userMessage);
+
+    // 3. Process with agent (History + New Message)
     const result = await agentService.processMessage({
-      messages,
+      messages: [...history, userMessage],
       context: {
         userId: user.id,
         orgId: membership.org_id,
@@ -67,10 +106,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // 4. Save generated messages (Assistant response + Tool calls)
+    for (const msg of result.generatedMessages) {
+      await conversationService.addMessage(supabase, conversationId!, msg);
+    }
+
     // Return response
     return NextResponse.json({
       message: result.message,
       toolCalls: result.toolCalls,
+      conversationId,
     });
   } catch (error) {
     console.error("Agent chat error:", error);

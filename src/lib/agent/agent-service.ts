@@ -10,6 +10,7 @@ import { toolToOpenAIFunction } from "./types";
 import { queryTools } from "./tools/query-tools";
 import { actionTools } from "./tools/action-tools";
 import { embeddingService } from "./embedding-service";
+import { contextBuilder } from "./context-builder";
 
 /**
  * System prompt that defines the agent's personality and behavior
@@ -121,6 +122,7 @@ export class AgentService {
       args: Record<string, unknown>;
       result: ToolResult;
     }[];
+    generatedMessages: OpenAI.Chat.ChatCompletionMessageParam[];
     rawResponse?: OpenAI.Chat.ChatCompletion;
   }> {
     const { messages, context, maxIterations = 5 } = params;
@@ -129,25 +131,38 @@ export class AgentService {
     let contextMessage = "";
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
 
-    if (lastUserMessage && typeof lastUserMessage.content === "string" && context.orgId) {
+    if (context.orgId) {
+      // 1. Build Deterministic Context (Cycle, Score, Tasks)
       try {
-        const relevantDocs = await embeddingService.searchEmbeddings(
+        const deterministicContext = await contextBuilder.buildContext(
           context.supabase,
-          lastUserMessage.content,
           context.orgId
         );
+        contextMessage += contextBuilder.formatContext(deterministicContext);
+      } catch (error) {
+        console.error("Context builder failed:", error);
+      }
 
-        if (relevantDocs.length > 0) {
-          contextMessage = `
-Here is some relevant context from the user's plans:
+      // 2. Build Semantic Context (RAG)
+      if (lastUserMessage && typeof lastUserMessage.content === "string") {
+        try {
+          const relevantDocs = await embeddingService.searchEmbeddings(
+            context.supabase,
+            lastUserMessage.content,
+            context.orgId
+          );
+
+          if (relevantDocs.length > 0) {
+            contextMessage += `
+\n--- RELEVANT PLANS & NOTES ---\n
 ${relevantDocs
-  .map((doc) => `--- [${doc.metadata.entity_type}] ${doc.metadata.title || "Untitled"} ---\n${doc.content}`)
+  .map((doc) => `[${doc.metadata.entity_type.toUpperCase()}] ${doc.metadata.title || "Untitled"}\n${doc.content}`)
   .join("\n\n")}
 `;
+          }
+        } catch (error) {
+          console.error("RAG retrieval failed:", error);
         }
-      } catch (error) {
-        console.error("RAG retrieval failed:", error);
-        // Continue without context if RAG fails
       }
     }
 
@@ -159,6 +174,7 @@ ${relevantDocs
 
     let iteration = 0;
     let currentMessages = fullMessages;
+    const generatedMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
     const toolCallHistory: {
       name: string;
       args: Record<string, unknown>;
@@ -178,6 +194,9 @@ ${relevantDocs
       const choice = response.choices[0];
       const message = choice.message;
 
+      // Track generated message
+      generatedMessages.push(message);
+
       // If no tool calls, return the message
       if (!message.tool_calls || message.tool_calls.length === 0) {
         return {
@@ -185,6 +204,7 @@ ${relevantDocs
             message.content ||
             "I apologize, but I couldn't generate a response.",
           toolCalls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
+          generatedMessages,
           rawResponse: response,
         };
       }
@@ -212,11 +232,14 @@ ${relevantDocs
         });
 
         // Add tool result to messages
-        toolResults.push({
+        const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = {
           role: "tool",
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
-        });
+        };
+        
+        toolResults.push(toolMessage);
+        generatedMessages.push(toolMessage);
       }
 
       // Update messages for next iteration
@@ -228,6 +251,7 @@ ${relevantDocs
       message:
         "I executed several operations but reached the iteration limit. Please ask a follow-up question for more details.",
       toolCalls: toolCallHistory,
+      generatedMessages,
     };
   }
 
