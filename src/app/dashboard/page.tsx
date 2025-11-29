@@ -1,5 +1,4 @@
-import { Typography, Paper, Box, Button } from '@mui/material'
-import Grid from '@mui/material/Grid2';
+import { Typography, Paper, Box, Button, Stack } from '@mui/material'
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
 import Link from 'next/link'
@@ -90,7 +89,7 @@ export default async function DashboardPage() {
       if (instance.status === 'done') {
         completedWeight += weight
       }
-    }
+    })
 
     if (totalWeight > 0) {
       weeklyScore = Math.round((completedWeight / totalWeight) * 100)
@@ -106,8 +105,8 @@ export default async function DashboardPage() {
         This is your dashboard. From here you can manage your 12-week cycles, goals, and tactics.
       </Typography>
       
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mt: 2 }}>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240 }}>
             <Typography variant="h6" color="primary" gutterBottom>
               Current Cycle
@@ -132,8 +131,8 @@ export default async function DashboardPage() {
               </Box>
             )}
           </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240, overflow: 'auto' }}>
             <Typography variant="h6" color="primary" gutterBottom>
               Today&apos;s Focus
@@ -159,8 +158,8 @@ export default async function DashboardPage() {
               </Typography>
             )}
           </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6, lg: 4 }}>
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 300 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240 }}>
             <Typography variant="h6" color="primary" gutterBottom>
               Weekly Score
@@ -172,8 +171,8 @@ export default async function DashboardPage() {
                 Lead Indicator Score
             </Typography>
           </Paper>
-        </Grid>
-      </Grid>
+        </Box>
+      </Stack>
     </Box>
   )
 }

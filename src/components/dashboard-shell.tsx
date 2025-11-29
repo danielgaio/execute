@@ -18,6 +18,8 @@ import {
   Avatar,
   Menu,
   MenuItem,
+  Fab,
+  Collapse,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -28,11 +30,15 @@ import {
   Settings as SettingsIcon,
   Person as PersonIcon,
   CalendarViewWeek as WeekIcon,
+  SmartToy as SmartToyIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import { logout } from "@/app/dashboard/actions";
 import { useRouter } from "next/navigation";
+import AgentChat from "./agent-chat";
 
 const drawerWidth = 240;
+const agentDrawerWidth = 400;
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -49,6 +55,7 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
   const router = useRouter();
 
   const handleDrawerToggle = () => {
@@ -66,6 +73,10 @@ export default function DashboardShell({
   const handleLogout = async () => {
     handleClose();
     await logout();
+  };
+
+  const toggleAgent = () => {
+    setAgentOpen(!agentOpen);
   };
 
   const menuItems = [
@@ -203,12 +214,59 @@ export default function DashboardShell({
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          width: { 
+            sm: `calc(100% - ${drawerWidth}px - ${agentOpen ? agentDrawerWidth : 0}px)` 
+          },
+          transition: 'width 0.3s',
         }}
       >
         <Toolbar />
         {children}
       </Box>
+
+      {/* Agent Chat Drawer */}
+      <Drawer
+        anchor="right"
+        variant="persistent"
+        open={agentOpen}
+        sx={{
+          width: agentDrawerWidth,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: agentDrawerWidth,
+            boxSizing: 'border-box',
+          },
+        }}
+      >
+        <Toolbar />
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
+            <IconButton onClick={toggleAgent} size="small">
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
+            <AgentChat />
+          </Box>
+        </Box>
+      </Drawer>
+
+      {/* Floating Action Button for Agent */}
+      <Collapse in={!agentOpen}>
+        <Fab
+          color="secondary"
+          aria-label="open agent"
+          onClick={toggleAgent}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 1200,
+          }}
+        >
+          <SmartToyIcon />
+        </Fab>
+      </Collapse>
     </Box>
   );
 }
