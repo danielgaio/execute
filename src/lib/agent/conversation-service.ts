@@ -59,7 +59,13 @@ export class ConversationService {
     conversationId: string,
     message: OpenAI.Chat.ChatCompletionMessageParam
   ) {
-    const dbMessage: any = {
+    const dbMessage: {
+      conversation_id: string;
+      role: string;
+      content: string | null;
+      tool_calls?: OpenAI.Chat.ChatCompletionMessageToolCall[];
+      tool_call_id?: string;
+    } = {
       conversation_id: conversationId,
       role: message.role,
       content: typeof message.content === "string" ? message.content : null,
@@ -94,21 +100,36 @@ export class ConversationService {
 
     if (error) throw error;
 
-    return data.map((msg: any) => {
-      const baseMsg: any = {
-        role: msg.role,
+    interface DbMessage {
+      role: string;
+      content: string | null;
+      tool_calls?: OpenAI.Chat.ChatCompletionMessageToolCall[];
+      tool_call_id?: string;
+    }
+
+    return data.map((msg: DbMessage) => {
+      const baseMsg: OpenAI.Chat.ChatCompletionMessageParam = {
+        role: msg.role as "user" | "assistant" | "tool" | "system",
         content: msg.content,
-      };
+      } as OpenAI.Chat.ChatCompletionMessageParam;
 
       if (msg.role === "assistant" && msg.tool_calls) {
-        baseMsg.tool_calls = msg.tool_calls;
+        return {
+          role: "assistant" as const,
+          content: msg.content,
+          tool_calls: msg.tool_calls,
+        };
       }
 
       if (msg.role === "tool") {
-        baseMsg.tool_call_id = msg.tool_call_id;
+        return {
+          role: "tool" as const,
+          content: msg.content || "",
+          tool_call_id: msg.tool_call_id || "",
+        };
       }
 
-      return baseMsg as OpenAI.Chat.ChatCompletionMessageParam;
+      return baseMsg;
     });
   }
 
