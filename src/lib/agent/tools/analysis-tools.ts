@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getWeekStart } from "@/utils/planning";
 
+// Type definitions for Supabase query results
 interface TacticInstance {
   id: string;
   status: string;
@@ -55,6 +56,33 @@ interface Cycle {
   status: string;
 }
 
+// Additional types for other queries
+interface TacticWithGoal {
+  id: string;
+  title: string;
+  weight: number;
+  status: string;
+  goal_id: string;
+  goals: {
+    id: string;
+    title: string;
+    status: string;
+  } | null;
+}
+
+interface FindBlockersInstance {
+  id: string;
+  status: string;
+  due_date: string;
+  week_start: string;
+  tactic_id: string;
+}
+
+interface SimpleTactic {
+  id: string;
+  goal_id: string;
+}
+
 /**
  * Explain why the current score is what it is
  */
@@ -90,6 +118,7 @@ export const explainStatusTool: AgentTool = {
           status,
           due_date,
           week_start,
+          tactic_id,
           tactics (
             id,
             title,
@@ -107,7 +136,8 @@ export const explainStatusTool: AgentTool = {
 
       if (error) throw error;
 
-      const typedInstances = instances as unknown as TacticInstance[];
+      // Safe type handling with default empty array
+      const typedInstances: TacticInstance[] = (instances || []) as unknown as TacticInstance[];
 
       // Categorize instances
       const completed: { title: string; weight: number; goal: string }[] = [];
@@ -314,7 +344,15 @@ export const compareCyclesTool: AgentTool = {
 
       if (cyclesError) throw cyclesError;
 
-      const typedCycles = cyclesData as unknown as Cycle[];
+      // Safe type handling with default empty array
+      const typedCycles: Cycle[] = (cyclesData || []) as Cycle[];
+
+      if (typedCycles.length === 0) {
+        return {
+          success: false,
+          error: "No cycle data found.",
+        };
+      }
 
       // Fetch goals for each cycle
       const { data: goalsData, error: goalsError } = await context.supabase
@@ -324,24 +362,87 @@ export const compareCyclesTool: AgentTool = {
 
       if (goalsError) throw goalsError;
 
-      const typedGoals = goalsData as unknown as Goal[];
+      // Safe type handling
+      const typedGoals: Goal[] = (goalsData || []) as Goal[];
 
       // Fetch tactic instances for each cycle's goals
       const goalIds = typedGoals.map((g) => g.id);
       
-      const { data: tacticsData } = await context.supabase
+      // Handle case when no goals exist
+      if (goalIds.length === 0) {
+        return {
+          success: true,
+          data: {
+            cycles_compared: typedCycles.length,
+            comparison: typedCycles.map((cycle) => ({
+              cycle_id: cycle.id,
+              cycle_title: cycle.title,
+              cycle_status: cycle.status,
+              dates: `${cycle.start_date} to ${cycle.end_date}`,
+              metrics: {
+                avg_lead_score: 0,
+                completion_rate: 0,
+                total_instances: 0,
+                completed_instances: 0,
+                goal_count: 0,
+                goals_by_status: {},
+              },
+            })),
+            insights: ["No goals found in these cycles yet."],
+          },
+        };
+      }
+      
+      const { data: tacticsData, error: tacticsError } = await context.supabase
         .from("tactics")
         .select("id, goal_id")
         .in("goal_id", goalIds);
 
-      const tacticIds = tacticsData?.map((t) => t.id) || [];
+      if (tacticsError) throw tacticsError;
 
-      const { data: instancesData } = await context.supabase
+      const typedTactics: SimpleTactic[] = (tacticsData || []) as SimpleTactic[];
+      const tacticIds = typedTactics.map((t) => t.id);
+
+      // Handle case when no tactics exist
+      if (tacticIds.length === 0) {
+        return {
+          success: true,
+          data: {
+            cycles_compared: typedCycles.length,
+            comparison: typedCycles.map((cycle) => {
+              const cycleGoals = typedGoals.filter((g) => g.cycle_id === cycle.id);
+              const goalsByStatus = cycleGoals.reduce((acc, g) => {
+                acc[g.status] = (acc[g.status] || 0) + 1;
+                return acc;
+              }, {} as Record<string, number>);
+
+              return {
+                cycle_id: cycle.id,
+                cycle_title: cycle.title,
+                cycle_status: cycle.status,
+                dates: `${cycle.start_date} to ${cycle.end_date}`,
+                metrics: {
+                  avg_lead_score: 0,
+                  completion_rate: 0,
+                  total_instances: 0,
+                  completed_instances: 0,
+                  goal_count: cycleGoals.length,
+                  goals_by_status: goalsByStatus,
+                },
+              };
+            }),
+            insights: ["No tactics found in these cycles yet."],
+          },
+        };
+      }
+
+      const { data: instancesData, error: instancesError } = await context.supabase
         .from("tactic_instances")
         .select(`
           id,
           status,
           week_start,
+          tactic_id,
           tactics (
             id,
             weight,
@@ -351,8 +452,10 @@ export const compareCyclesTool: AgentTool = {
         .in("tactic_id", tacticIds)
         .eq("planned", true);
 
-      // Cast to proper type
-      const typedInstancesData = instancesData as unknown as CompareCycleInstance[];
+      if (instancesError) throw instancesError;
+
+      // Safe type handling
+      const typedInstancesData: CompareCycleInstance[] = (instancesData || []) as unknown as CompareCycleInstance[];
 
       // Calculate metrics per cycle
       const cycleMetrics = typedCycles.map((cycle) => {
@@ -360,12 +463,12 @@ export const compareCyclesTool: AgentTool = {
         const cycleGoalIds = cycleGoals.map((g) => g.id);
         
         // Get tactic IDs for this cycle
-        const cycleTacticIds = tacticsData
-          ?.filter((t) => cycleGoalIds.includes(t.goal_id))
-          .map((t) => t.id) || [];
+        const cycleTacticIds = typedTactics
+          .filter((t) => cycleGoalIds.includes(t.goal_id))
+          .map((t) => t.id);
 
         // Filter instances for this cycle
-        const cycleInstances = (typedInstancesData || []).filter(
+        const cycleInstances = typedInstancesData.filter(
           (i) => i.tactics && cycleTacticIds.includes(i.tactics.id)
         );
 
@@ -519,7 +622,7 @@ export const findBlockersTool: AgentTool = {
       }
 
       // Fetch tactics and instances
-      const { data: tactics } = await context.supabase
+      const { data: tactics, error: tacticsError } = await context.supabase
         .from("tactics")
         .select(`
           id,
@@ -536,9 +639,31 @@ export const findBlockersTool: AgentTool = {
         .in("goal_id", goalIds)
         .eq("status", "active");
 
-      const tacticIds = tactics?.map((t) => t.id) || [];
+      if (tacticsError) throw tacticsError;
+      
+      // Safe type handling
+      const typedTactics: TacticWithGoal[] = (tactics || []) as unknown as TacticWithGoal[];
+      const tacticIds = typedTactics.map((t) => t.id);
 
-      const { data: instances } = await context.supabase
+      // Handle case when no tactics exist
+      if (tacticIds.length === 0) {
+        return {
+          success: true,
+          data: {
+            summary: {
+              total_blockers: 0,
+              high_severity: 0,
+              medium_severity: 0,
+              low_severity: 0,
+            },
+            blockers: [],
+            overall_health: "healthy",
+            note: "No tactics found to analyze.",
+          },
+        };
+      }
+
+      const { data: instances, error: instancesError } = await context.supabase
         .from("tactic_instances")
         .select(`
           id,
@@ -550,6 +675,11 @@ export const findBlockersTool: AgentTool = {
         .in("tactic_id", tacticIds)
         .eq("planned", true);
 
+      if (instancesError) throw instancesError;
+
+      // Safe type handling
+      const typedInstances: FindBlockersInstance[] = (instances || []) as FindBlockersInstance[];
+
       // Analyze blockers
       const blockers: {
         type: string;
@@ -560,13 +690,13 @@ export const findBlockersTool: AgentTool = {
       }[] = [];
 
       // 1. Overdue items (high severity)
-      const overdueInstances = instances?.filter(
+      const overdueInstances = typedInstances.filter(
         (i) => i.status === "pending" && i.due_date < today
-      ) || [];
+      );
 
       if (overdueInstances.length > 0) {
         const overdueItems = overdueInstances.map((i) => {
-          const tactic = tactics?.find((t) => t.id === i.tactic_id);
+          const tactic = typedTactics.find((t) => t.id === i.tactic_id);
           return tactic?.title || "Unknown";
         });
 
@@ -583,7 +713,7 @@ export const findBlockersTool: AgentTool = {
       const tacticSkipCount: Record<string, number> = {};
       const tacticDeferCount: Record<string, number> = {};
 
-      instances?.forEach((i) => {
+      typedInstances.forEach((i) => {
         if (i.status === "skipped") {
           tacticSkipCount[i.tactic_id] = (tacticSkipCount[i.tactic_id] || 0) + 1;
         }
@@ -595,7 +725,7 @@ export const findBlockersTool: AgentTool = {
       const frequentlySkipped = Object.entries(tacticSkipCount)
         .filter(([, count]) => count >= 2)
         .map(([tacticId]) => {
-          const tactic = tactics?.find((t) => t.id === tacticId);
+          const tactic = typedTactics.find((t) => t.id === tacticId);
           return tactic?.title || "Unknown";
         });
 
@@ -612,7 +742,7 @@ export const findBlockersTool: AgentTool = {
       const frequentlyDeferred = Object.entries(tacticDeferCount)
         .filter(([, count]) => count >= 2)
         .map(([tacticId]) => {
-          const tactic = tactics?.find((t) => t.id === tacticId);
+          const tactic = typedTactics.find((t) => t.id === tacticId);
           return tactic?.title || "Unknown";
         });
 
@@ -627,15 +757,12 @@ export const findBlockersTool: AgentTool = {
       }
 
       // 3. At-risk goals
-      const atRiskGoals = tactics
-        ?.filter((t) => {
-          const goal = t.goals as unknown as { status: string; title: string } | null;
-          return goal?.status === "at_risk" || goal?.status === "off_track";
+      const atRiskGoals = typedTactics
+        .filter((t) => {
+          const goalStatus = t.goals?.status;
+          return goalStatus === "at_risk" || goalStatus === "off_track";
         })
-        .map((t) => {
-          const goal = t.goals as unknown as { title: string } | null;
-          return goal?.title || "Unknown";
-        }) || [];
+        .map((t) => t.goals?.title || "Unknown");
 
       const uniqueAtRiskGoals = [...new Set(atRiskGoals)];
 
@@ -651,13 +778,13 @@ export const findBlockersTool: AgentTool = {
 
       // 4. Low engagement (no completions in recent weeks)
       const recentWeeks = 2;
-      const recentInstances = instances?.filter((i) => {
+      const recentInstances = typedInstances.filter((i) => {
         const instanceWeek = new Date(i.week_start);
         const currentWeek = new Date(weekStart);
         const diffTime = currentWeek.getTime() - instanceWeek.getTime();
         const diffWeeks = Math.ceil(diffTime / (7 * 24 * 60 * 60 * 1000));
         return diffWeeks <= recentWeeks;
-      }) || [];
+      });
 
       const completedRecent = recentInstances.filter((i) => i.status === "done").length;
       const totalRecent = recentInstances.length;
