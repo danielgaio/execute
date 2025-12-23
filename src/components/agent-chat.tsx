@@ -21,6 +21,8 @@ import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
 
+import { useOrganization } from "@/contexts/organization-context";
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -33,6 +35,7 @@ interface Message {
 }
 
 export default function AgentChat() {
+  const { currentOrg } = useOrganization();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -100,6 +103,7 @@ export default function AgentChat() {
         body: JSON.stringify({
           message: userMessage.content,
           conversationId,
+          orgId: currentOrg?.id,
         }),
       });
 

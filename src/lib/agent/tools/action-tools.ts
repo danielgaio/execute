@@ -257,7 +257,7 @@ export const markTacticCompleteTool: AgentTool = {
       const beforeState = await captureEntityState(
         context.supabase,
         "tactic_instances",
-        params.instance_id
+        params.instance_id as string
       );
 
       const { error } = await context.supabase
@@ -295,7 +295,7 @@ export const markTacticCompleteTool: AgentTool = {
         toolName: "mark_tactic_complete",
         action: "update",
         entityType: "tactic_instance",
-        entityId: params.instance_id,
+        entityId: params.instance_id as string,
         beforeState,
         afterState: instance,
         metadata: {
@@ -342,7 +342,7 @@ export const deferTacticTool: AgentTool = {
       const beforeState = await captureEntityState(
         context.supabase,
         "tactic_instances",
-        params.instance_id
+        params.instance_id as string
       );
 
       const { error } = await context.supabase
@@ -361,7 +361,7 @@ export const deferTacticTool: AgentTool = {
       const afterState = await captureEntityState(
         context.supabase,
         "tactic_instances",
-        params.instance_id
+        params.instance_id as string
       );
 
       // Log agent action
@@ -371,7 +371,7 @@ export const deferTacticTool: AgentTool = {
         toolName: "defer_tactic",
         action: "update",
         entityType: "tactic_instance",
-        entityId: params.instance_id,
+        entityId: params.instance_id as string,
         beforeState,
         afterState,
         metadata: {

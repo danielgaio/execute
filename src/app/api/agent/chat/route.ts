@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 interface ChatRequest {
   message: string;
   conversationId?: string;
+  orgId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -30,27 +31,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's organization
-    const { data: membership } = await supabase
-      .from("org_members")
-      .select("org_id, role")
-      .eq("user_id", user.id)
-      .limit(1)
-      .single();
-
-    if (!membership) {
-      return NextResponse.json(
-        {
-          error:
-            "No organization found. Please create or join an organization first.",
-        },
-        { status: 403 }
-      );
-    }
-
     // Parse request body
     const body = (await request.json()) as ChatRequest;
-    const { message: userContent, conversationId: requestedConversationId } = body;
+    const {
+      message: userContent,
+      conversationId: requestedConversationId,
+      orgId,
+    } = body;
 
     if (!userContent) {
       return NextResponse.json(
@@ -58,6 +45,32 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Get user's organization (validate access if orgId provided, otherwise get default)
+    let query = supabase
+      .from("org_members")
+      .select("org_id, role")
+      .eq("user_id", user.id);
+
+    if (orgId) {
+      query = query.eq("org_id", orgId);
+    }
+
+    const { data: membership } = await query.limit(1).single();
+
+    if (!membership) {
+      return NextResponse.json(
+        {
+          error: orgId
+            ? "Unauthorized access to organization"
+            : "No organization found. Please create or join an organization first.",
+        },
+        { status: 403 }
+      );
+    }
+
+    const currentOrgId = membership.org_id;
+    const userRole = membership.role;
 
     // 1. Get or create conversation
     let conversationId = requestedConversationId;

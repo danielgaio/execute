@@ -435,16 +435,19 @@ export const getEntityHistoryTool: AgentTool = {
       .optional()
       .describe("Maximum number of history entries to return (default: 50)"),
   }),
-  handler: async (
-    params: { entity_type: string; entity_id: string; limit?: number },
-    context: ToolContext
-  ): Promise<ToolResult> => {
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
+      const { entity_type, entity_id, limit } = params as {
+        entity_type: string;
+        entity_id: string;
+        limit?: number;
+      };
+
       const history = await getEntityHistory(
         context.supabase,
-        params.entity_type,
-        params.entity_id,
-        params.limit || 50
+        entity_type,
+        entity_id,
+        limit || 50
       );
 
       return {

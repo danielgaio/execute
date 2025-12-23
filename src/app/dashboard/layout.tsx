@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import DashboardShell from '@/components/dashboard-shell'
+import { OrganizationProvider } from '@/contexts/organization-context'
 
 export default async function DashboardLayout({
   children,
@@ -18,7 +19,7 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  // Fetch profile data if needed, or just pass basic user info
+  // Fetch profile data
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -31,9 +32,39 @@ export default async function DashboardLayout({
     avatar_url: profile?.avatar_url || user.user_metadata?.avatar_url,
   }
 
+  // Fetch User's Organizations
+  const { data: members } = await supabase
+    .from('org_members')
+    .select('role, organizations(id, name)')
+    .eq('user_id', user.id)
+
+  const organizations = members?.map((m: any) => {
+    const org = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations
+    return {
+      id: org?.id,
+      name: org?.name,
+      role: m.role,
+    }
+  }) || []
+
+  // Handle Onboarding: If no orgs, and not already on the create page
+  // Note: We can't easily check the current path in a layout without headers/middleware tricks
+  // So we'll let the client component handle the redirect if the list is empty,
+  // OR we assume if they are accessing /dashboard/* they need an org.
+  // However, /dashboard/organizations/new is a valid path for 0 orgs.
+  // We will handle the redirect logic in the page or middleware, but for now,
+  // we pass the data to the provider.
+
+  const initialCurrentOrg = organizations.length > 0 ? organizations[0] : null
+
   return (
-    <DashboardShell user={userData}>
-      {children}
-    </DashboardShell>
+    <OrganizationProvider 
+      initialOrgs={organizations} 
+      initialCurrentOrg={initialCurrentOrg}
+    >
+      <DashboardShell user={userData}>
+        {children}
+      </DashboardShell>
+    </OrganizationProvider>
   )
 }
