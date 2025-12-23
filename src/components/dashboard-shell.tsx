@@ -20,6 +20,8 @@ import {
   MenuItem,
   Fab,
   Collapse,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
@@ -72,6 +74,8 @@ function DashboardShellContent({
   const router = useRouter();
   const pathname = usePathname();
   const { organizations, currentOrg, switchOrg } = useOrganization();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   // Redirect if no orgs and not on create page
   if (
@@ -297,7 +301,7 @@ function DashboardShellContent({
           flexGrow: 1,
           p: 3,
           width: { 
-            sm: `calc(100% - ${drawerWidth}px - ${agentOpen ? agentDrawerWidth : 0}px)` 
+            sm: `calc(100% - ${drawerWidth}px - ${agentOpen && !isMobile ? agentDrawerWidth : 0}px)` 
           },
           transition: 'width 0.3s',
         }}
@@ -309,26 +313,23 @@ function DashboardShellContent({
       {/* Agent Chat Drawer */}
       <Drawer
         anchor="right"
-        variant="persistent"
+        variant={isMobile ? "temporary" : "persistent"}
         open={agentOpen}
+        onClose={isMobile ? toggleAgent : undefined}
         sx={{
-          width: agentDrawerWidth,
+          width: isMobile ? '100%' : agentDrawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
-            width: agentDrawerWidth,
+            width: isMobile ? '100%' : agentDrawerWidth,
             boxSizing: 'border-box',
           },
+          zIndex: (theme) => theme.zIndex.drawer + 2, // Above everything on mobile
         }}
       >
         <Toolbar />
         <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end' }}>
-            <IconButton onClick={toggleAgent} size="small">
-              <CloseIcon />
-            </IconButton>
-          </Box>
           <Box sx={{ flexGrow: 1, overflow: 'hidden' }}>
-            <AgentChat />
+            <AgentChat onClose={toggleAgent} />
           </Box>
         </Box>
       </Drawer>

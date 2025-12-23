@@ -25,9 +25,14 @@ import {
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
+import CloseIcon from "@mui/icons-material/Close";
 import { useAgentChat } from "@/hooks/use-agent-chat";
 
-export default function AgentChat() {
+interface AgentChatProps {
+  onClose?: () => void;
+}
+
+export default function AgentChat({ onClose }: AgentChatProps) {
   const {
     messages,
     input,
@@ -190,12 +195,20 @@ export default function AgentChat() {
           borderColor: "divider",
           display: "flex",
           alignItems: "center",
+          justifyContent: "space-between",
           gap: 1,
         }}
       >
-        <SmartToyIcon color="primary" />
-        <Typography variant="h6">Execute AI Agent</Typography>
-        <Chip label="Beta" size="small" color="primary" variant="outlined" />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <SmartToyIcon color="primary" />
+          <Typography variant="h6">Execute AI Agent</Typography>
+          <Chip label="Beta" size="small" color="primary" variant="outlined" />
+        </Box>
+        {onClose && (
+          <IconButton onClick={onClose} size="small">
+            <CloseIcon />
+          </IconButton>
+        )}
       </Box>
 
       {/* Messages */}
