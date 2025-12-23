@@ -7,6 +7,13 @@ vi.mock("@/utils/planning", () => ({
   getWeekStart: vi.fn().mockReturnValue("2024-01-01"),
 }));
 
+// Mock audit-service
+vi.mock("./audit-service", () => ({
+  getRecentAuditActivity: vi.fn().mockResolvedValue([
+    { timestamp: "2024-01-01T10:00:00Z", action: "create", entity_type: "goal" }
+  ])
+}));
+
 describe("ContextBuilder", () => {
   let contextBuilder: ContextBuilder;
   let mockSupabase: any;
@@ -53,8 +60,8 @@ describe("ContextBuilder", () => {
       };
 
       const mockInstances = [
-        { status: "completed", due_date: "2024-01-02", tactics: { weight: 1 } },
-        { status: "pending", due_date: "2024-01-03", tactics: { weight: 1 } },
+        { id: "1", status: "done", due_date: "2024-01-02", planned: true, tactics: { weight: 1 } },
+        { id: "2", status: "pending", due_date: "2024-01-03", planned: true, tactics: { weight: 1 } },
       ];
 
       // Setup Supabase mocks
@@ -71,6 +78,9 @@ describe("ContextBuilder", () => {
         if (table === "tactic_instances") {
           return createMockChain(mockInstances);
         }
+        if (table === "recent_audit_activity") {
+            return createMockChain([]);
+        }
         return createMockChain(null);
       });
 
@@ -84,6 +94,8 @@ describe("ContextBuilder", () => {
       expect(result.goals).toHaveLength(2);
       expect(result.vision).toBe("To be the best.");
       expect(result.pendingTasksCount).toBe(1); // 1 pending
+      expect(result.recentActivity).toBeDefined();
+      expect(result.recentActivity?.length).toBe(1);
     });
 
     it("should handle missing data gracefully", async () => {

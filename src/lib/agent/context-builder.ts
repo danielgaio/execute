@@ -1,5 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getWeekStart } from "@/utils/planning";
+import { calculateLeadScore, type ScorableItem } from "@/lib/domain/scoring";
+import { getRecentAuditActivity } from "./audit-service";
 
 export interface AgentContextData {
   activeCycle?: {
@@ -12,11 +14,13 @@ export interface AgentContextData {
   goals?: {
     title: string;
     status: string;
-    progress: number; // calculated from target/baseline if possible, or just placeholder
+    progress: number;
   }[];
   weeklyScore?: number;
   pendingTasksCount: number;
+  overdueTasksCount: number;
   todayTasksCount: number;
+  recentActivity?: string[];
 }
 
 export class ContextBuilder {
@@ -29,6 +33,7 @@ export class ContextBuilder {
   ): Promise<AgentContextData> {
     const context: AgentContextData = {
       pendingTasksCount: 0,
+      overdueTasksCount: 0,
       todayTasksCount: 0,
     };
 
@@ -66,7 +71,7 @@ export class ContextBuilder {
         context.goals = goals.map(g => ({
           title: g.title,
           status: g.status,
-          progress: 0 // Placeholder, could calculate if we had current value
+          progress: 0 // Placeholder
         }));
       }
     }
@@ -84,57 +89,69 @@ export class ContextBuilder {
       context.vision = vision.content_md;
     }
 
-    // 3. Get Weekly Score & Pending Tasks
+    // 3. Get Weekly Score & Task Stats
     const weekStart = getWeekStart();
+    const todayStr = new Date().toISOString().split("T")[0];
+    
     const { data: instances } = await supabase
       .from("tactic_instances")
-      .select(
-        `
+      .select(`
+        id,
         status,
         due_date,
+        planned,
         tactics (
           weight
         )
-      `
-      )
+      `)
       .eq("org_id", orgId)
-      .eq("week_start", weekStart)
-      .eq("planned", true);
+      .eq("week_start", weekStart);
 
     if (instances && instances.length > 0) {
-      let totalWeight = 0;
-      let completedWeight = 0;
+      // Calculate Score using Domain Service
+      const scorableItems: ScorableItem[] = instances.map((i: any) => ({
+        id: i.id,
+        status: i.status,
+        weight: i.tactics?.weight || 1.0,
+        planned: i.planned
+      }));
+
+      context.weeklyScore = calculateLeadScore(scorableItems);
+
+      // Calculate Counts
       let pendingCount = 0;
       let todayCount = 0;
-      const todayStr = new Date().toISOString().split("T")[0];
+      let overdueCount = 0;
 
-      // Define type for the joined query result
-      type InstanceWithTactic = {
-        status: string;
-        due_date: string;
-        tactics: { weight: number } | null;
-      };
-
-      (instances as unknown as InstanceWithTactic[]).forEach((instance) => {
-        const weight = instance.tactics?.weight || 1.0;
-        totalWeight += weight;
-
-        if (instance.status === "done") {
-          completedWeight += weight;
-        } else if (instance.status === "pending") {
+      instances.forEach((instance: any) => {
+        if (instance.status === "pending") {
           pendingCount++;
           if (instance.due_date === todayStr) {
             todayCount++;
           }
+          if (instance.due_date < todayStr) {
+            overdueCount++;
+          }
         }
       });
 
-      context.weeklyScore =
-        totalWeight > 0
-          ? Math.round((completedWeight / totalWeight) * 100)
-          : 100;
       context.pendingTasksCount = pendingCount;
       context.todayTasksCount = todayCount;
+      context.overdueTasksCount = overdueCount;
+    } else {
+        // No instances found, score is 100% (nothing planned)
+        context.weeklyScore = 100;
+    }
+
+    // 4. Get Recent Activity
+    try {
+        const activity = await getRecentAuditActivity(supabase, orgId, 5);
+        context.recentActivity = activity.map(a => {
+            const action = a.action === 'agent_tool_call' ? `Agent used tool: ${a.actor_context?.tool_name || 'unknown'}` : `${a.action} ${a.entity_type}`;
+            return `[${new Date(a.timestamp).toLocaleTimeString()}] ${action}`;
+        });
+    } catch (e) {
+        console.error("Failed to fetch recent activity for context", e);
     }
 
     return context;
@@ -147,7 +164,6 @@ export class ContextBuilder {
     let prompt = "\n\n--- CURRENT EXECUTION CONTEXT ---\n";
 
     if (data.vision) {
-      // Truncate vision if too long to save tokens, but keep enough for context
       const visionSnippet = data.vision.length > 500 ? data.vision.substring(0, 500) + "..." : data.vision;
       prompt += `Organization Vision: "${visionSnippet}"\n`;
     } else {
@@ -175,6 +191,15 @@ export class ContextBuilder {
 
     prompt += `Pending Tasks This Week: ${data.pendingTasksCount}\n`;
     prompt += `Tasks Due Today: ${data.todayTasksCount}\n`;
+    
+    if (data.overdueTasksCount > 0) {
+        prompt += `⚠️ OVERDUE TASKS: ${data.overdueTasksCount}\n`;
+    }
+
+    if (data.recentActivity && data.recentActivity.length > 0) {
+        prompt += "\nRecent Activity:\n";
+        data.recentActivity.forEach(a => prompt += `- ${a}\n`);
+    }
 
     return prompt;
   }
