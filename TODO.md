@@ -14,7 +14,7 @@
 ### 2. Agent-Assisted Planning & Execution Tools
 
 - [x] Implement agent planning tools: `create_cycle`, `define_goal`, `add_tactic`
-- [ ] Implement advanced planning tools: `suggest_tactics_for_goal`, `review_plan_feasibility`
+- [x] Implement advanced planning tools: `suggest_tactics_for_goal`, `review_plan_feasibility`, `generate_weekly_plan`
 - [x] Build agent query tools: `list_due_items`, `query_scores`, `summarize_progress`
 - [x] Build advanced query tools: `explain_status`, `compare_cycles`, `find_blockers`
 - [x] Create agent action tools (with confirmation): `assign_tactic`, `defer_task`, `mark_complete`

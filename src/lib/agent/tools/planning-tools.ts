@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { embeddingService } from "../embedding-service";
+import { generateWeeklyPlan } from "../../domain/planning";
 
 /**
  * Get the current planning status (Cycle, Vision, Goals)
@@ -202,8 +203,57 @@ export const reviewPlanFeasibilityTool: AgentTool = {
   }
 };
 
+export const generateWeeklyPlanTool: AgentTool = {
+  name: "generate_weekly_plan",
+  description: "Generate tactic instances for the current week based on active tactics. This should be run at the start of the week or when tactics are changed.",
+  category: "planning",
+  requiresConfirmation: true,
+  parameters: z.object({
+    weekStart: z.string().optional().describe("The start date of the week (YYYY-MM-DD). Defaults to current week start.")
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      // Parse weekStart or use current week start (Monday)
+      let weekStartDate: Date;
+      if (params.weekStart) {
+        weekStartDate = new Date(params.weekStart);
+        if (isNaN(weekStartDate.getTime())) {
+          throw new Error("Invalid date format for weekStart. Use YYYY-MM-DD.");
+        }
+      } else {
+        // Calculate current week's Monday
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        weekStartDate = new Date(now.setDate(diff));
+        weekStartDate.setHours(0, 0, 0, 0);
+      }
+
+      const result = await generateWeeklyPlan(
+        context.supabase,
+        context.orgId,
+        weekStartDate
+      );
+      
+      return {
+        success: true,
+        data: {
+          message: `Weekly plan generated. Created ${result.generated} instances.`,
+          details: result
+        }
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
 export const planningTools = [
   getPlanningStatusTool,
   suggestTacticsTool,
-  reviewPlanFeasibilityTool
+  reviewPlanFeasibilityTool,
+  generateWeeklyPlanTool
 ];

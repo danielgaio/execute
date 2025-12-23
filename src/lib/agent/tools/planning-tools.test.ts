@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getPlanningStatusTool, suggestTacticsTool, reviewPlanFeasibilityTool } from "./planning-tools";
+import { getPlanningStatusTool, suggestTacticsTool, reviewPlanFeasibilityTool, generateWeeklyPlanTool } from "./planning-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { embeddingService } from "../embedding-service";
+import { generateWeeklyPlan } from "../../domain/planning";
 
 // Mock dependencies
 vi.mock('../embedding-service', () => ({
   embeddingService: {
     searchEmbeddings: vi.fn()
   }
+}));
+
+vi.mock("../../domain/planning", () => ({
+  generateWeeklyPlan: vi.fn()
 }));
 
 describe("Planning Tools", () => {
@@ -228,6 +233,18 @@ describe("Planning Tools", () => {
       expect(result.success).toBe(true);
       expect(result.data.warnings).toContain('Total weekly load is high (25). Ensure capacity exists.');
       expect(result.data.warnings).toContain('Tactic "Big Task" has a very high weight (10). Consider breaking it down.');
+    });
+  });
+
+  describe("generate_weekly_plan", () => {
+    it("should call domain service and return success", async () => {
+      (generateWeeklyPlan as any).mockResolvedValue({ generated: 5, errors: 0 });
+
+      const result = await generateWeeklyPlanTool.handler({ weekStart: "2025-01-01" }, mockContext);
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain("Created 5 instances");
+      expect(generateWeeklyPlan).toHaveBeenCalledWith(mockContext.supabase, mockContext.orgId, expect.any(Date));
     });
   });
 });
