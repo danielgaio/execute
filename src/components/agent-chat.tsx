@@ -63,6 +63,31 @@ export default function AgentChat() {
     }
   };
 
+  const renderConfirmationArgs = (request: typeof confirmationRequest) => {
+    if (!request) return null;
+    
+    if (request.name === 'create_vision' && typeof request.args.content === 'string') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Vision Content Preview:
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 1, maxHeight: 200, overflowY: 'auto', bgcolor: 'grey.50' }}>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+              {request.args.content}
+            </Typography>
+          </Paper>
+        </Box>
+      );
+    }
+
+    return (
+      <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
+        {JSON.stringify(request.args, null, 2)}
+      </Typography>
+    );
+  };
+
   return (
     <Paper
       elevation={3}
@@ -218,12 +243,10 @@ export default function AgentChat() {
                 The agent wants to perform the following action:
               </Typography>
               <Box sx={{ mt: 1, p: 1, bgcolor: "background.paper", borderRadius: 1 }}>
-                <Typography variant="body2" fontFamily="monospace">
+                <Typography variant="body2" fontFamily="monospace" gutterBottom>
                   {confirmationRequest.name}
                 </Typography>
-                <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
-                  {JSON.stringify(confirmationRequest.args, null, 2)}
-                </Typography>
+                {renderConfirmationArgs(confirmationRequest)}
               </Box>
             </CardContent>
             <CardActions>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Box,
   Button,
@@ -10,7 +10,9 @@ import {
   Alert,
   Container,
 } from '@mui/material'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 import { saveVision } from './actions'
+import { useAgent } from '@/contexts/agent-context'
 
 interface VisionFormProps {
   initialContent: string
@@ -21,6 +23,12 @@ export default function VisionForm({ initialContent }: VisionFormProps) {
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
   const [content, setContent] = useState(initialContent)
+  const { openAgent } = useAgent()
+
+  // Sync local state with prop when it changes (e.g. after agent update)
+  useEffect(() => {
+    setContent(initialContent)
+  }, [initialContent])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -49,9 +57,18 @@ export default function VisionForm({ initialContent }: VisionFormProps) {
     <Container maxWidth="md">
       <Box sx={{ mt: 4, mb: 4 }}>
         <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography component="h1" variant="h5" gutterBottom>
-            Your Vision
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography component="h1" variant="h5" sx={{ mb: 0 }}>
+              Your Vision
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<SmartToyIcon />}
+              onClick={() => openAgent("I need help drafting my 3-5 year vision. Can you interview me to help clarify my long-term goals?")}
+            >
+              Draft with AI
+            </Button>
+          </Box>
           <Typography variant="body2" color="text.secondary" paragraph>
             Your vision is your long-term aspirational goal. It should describe where you want to be in 3-5 years.
             This vision will guide your 12-week cycle goals and daily tactics.
