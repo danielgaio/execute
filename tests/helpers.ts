@@ -1,14 +1,30 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 
 // Load environment variables
-dotenv.config({ path: '.env.local' });
+// Prioritize .env.local, then .env
+const envLocalPath = path.resolve(process.cwd(), '.env.local');
+const envPath = path.resolve(process.cwd(), '.env');
+
+if (fs.existsSync(envLocalPath)) {
+  dotenv.config({ path: envLocalPath });
+} else if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_SERVICE_KEY || !SUPABASE_ANON_KEY) {
+  console.error('\x1b[31m%s\x1b[0m', 'CRITICAL ERROR: Missing Supabase keys for testing.');
+  console.error('Please ensure you have a .env.local file with:');
+  console.error('  NEXT_PUBLIC_SUPABASE_URL (default: http://127.0.0.1:54321)');
+  console.error('  NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  console.error('  SUPABASE_SERVICE_ROLE_KEY');
+  console.error('\nYou can get these keys by running `npx supabase status` if you are using local Supabase.');
   throw new Error('Missing Supabase keys in environment variables');
 }
 
