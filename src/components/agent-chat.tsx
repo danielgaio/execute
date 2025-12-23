@@ -17,6 +17,10 @@ import {
   Chip,
   Stack,
   Snackbar,
+  Button,
+  Card,
+  CardContent,
+  CardActions,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -34,6 +38,9 @@ export default function AgentChat() {
     toast,
     setToast,
     sendMessage,
+    confirmationRequest,
+    confirmAction,
+    cancelAction,
   } = useAgentChat();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -198,6 +205,36 @@ export default function AgentChat() {
           <Alert severity="error" onClose={() => setError(null)}>
             {error}
           </Alert>
+        )}
+
+        {/* Confirmation Request */}
+        {confirmationRequest && (
+          <Card variant="outlined" sx={{ borderColor: "warning.main", bgcolor: "warning.light" }}>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                Confirmation Required
+              </Typography>
+              <Typography variant="body2">
+                The agent wants to perform the following action:
+              </Typography>
+              <Box sx={{ mt: 1, p: 1, bgcolor: "background.paper", borderRadius: 1 }}>
+                <Typography variant="body2" fontFamily="monospace">
+                  {confirmationRequest.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
+                  {JSON.stringify(confirmationRequest.args, null, 2)}
+                </Typography>
+              </Box>
+            </CardContent>
+            <CardActions>
+              <Button size="small" color="inherit" onClick={cancelAction}>
+                Cancel
+              </Button>
+              <Button size="small" variant="contained" color="warning" onClick={confirmAction} disabled={isLoading}>
+                Confirm Action
+              </Button>
+            </CardActions>
+          </Card>
         )}
 
         <div ref={messagesEndRef} />

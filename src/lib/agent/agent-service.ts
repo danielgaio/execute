@@ -126,6 +126,7 @@ export class AgentService {
     messages: OpenAI.Chat.ChatCompletionMessageParam[];
     context: ToolContext;
     maxIterations?: number;
+    confirmedToolCallId?: string;
   }): Promise<{
     message: string;
     toolCalls?: {
@@ -135,14 +136,19 @@ export class AgentService {
     }[];
     generatedMessages: OpenAI.Chat.ChatCompletionMessageParam[];
     rawResponse?: OpenAI.Chat.ChatCompletion;
+    confirmationRequired?: {
+      toolCallId: string;
+      name: string;
+      args: Record<string, unknown>;
+    };
   }> {
-    const { messages, context, maxIterations = 5 } = params;
+    const { messages, context, maxIterations = 5, confirmedToolCallId } = params;
 
     // Retrieve relevant context using RAG
     let contextMessage = "";
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
 
-    if (context.orgId) {
+    if (context.orgId && lastUserMessage && typeof lastUserMessage.content === "string") {
       // 1. Build Deterministic Context (Cycle, Score, Tasks)
       try {
         const deterministicContext = await contextBuilder.buildContext(
@@ -155,25 +161,23 @@ export class AgentService {
       }
 
       // 2. Build Semantic Context (RAG)
-      if (lastUserMessage && typeof lastUserMessage.content === "string") {
-        try {
-          const relevantDocs = await embeddingService.searchEmbeddings(
-            context.supabase,
-            lastUserMessage.content,
-            context.orgId
-          );
+      try {
+        const relevantDocs = await embeddingService.searchEmbeddings(
+          context.supabase,
+          lastUserMessage.content,
+          context.orgId
+        );
 
-          if (relevantDocs.length > 0) {
-            contextMessage += `
+        if (relevantDocs.length > 0) {
+          contextMessage += `
 \n--- RELEVANT PLANS & NOTES ---\n
 ${relevantDocs
   .map((doc) => `[${doc.metadata.entity_type.toUpperCase()}] ${doc.metadata.title || "Untitled"}\n${doc.content}`)
   .join("\n\n")}
 `;
-          }
-        } catch (error) {
-          console.error("RAG retrieval failed:", error);
         }
+      } catch (error) {
+        console.error("RAG retrieval failed:", error);
       }
     }
 
@@ -191,6 +195,57 @@ ${relevantDocs
       args: Record<string, unknown>;
       result: ToolResult;
     }[] = [];
+
+    // RESUME LOGIC: Check if we are resuming from a tool call
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.role === 'assistant' && lastMessage.tool_calls?.length) {
+      const toolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+      
+      for (const toolCall of lastMessage.tool_calls) {
+        if (toolCall.type !== 'function') continue;
+
+        const toolName = toolCall.function.name;
+        const toolArgs = JSON.parse(toolCall.function.arguments);
+        const tool = this.tools.get(toolName);
+        
+        // Check confirmation
+        if (tool?.requiresConfirmation) {
+          if (toolCall.id !== confirmedToolCallId) {
+            // Not confirmed yet
+            return {
+              message: "Please confirm this action.",
+              generatedMessages: [], 
+              confirmationRequired: {
+                toolCallId: toolCall.id,
+                name: toolName,
+                args: toolArgs
+              }
+            };
+          }
+        }
+        
+        // Execute
+        const result = await this.executeTool(toolName, toolArgs, context);
+        
+        // Track tool call
+        toolCallHistory.push({
+          name: toolName,
+          args: toolArgs,
+          result,
+        });
+
+        const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = { 
+          role: 'tool', 
+          tool_call_id: toolCall.id, 
+          content: JSON.stringify(result) 
+        };
+        toolResults.push(toolMessage);
+        generatedMessages.push(toolMessage);
+      }
+      
+      // Append results to currentMessages
+      currentMessages = [...currentMessages, ...toolResults];
+    }
 
     while (iteration < maxIterations) {
       iteration++;
@@ -231,6 +286,20 @@ ${relevantDocs
           string,
           unknown
         >;
+        const tool = this.tools.get(toolName);
+
+        // Check confirmation for NEW tool calls
+        if (tool?.requiresConfirmation) {
+          return {
+            message: "Please confirm this action.",
+            generatedMessages, // Includes the assistant message requesting the tool
+            confirmationRequired: {
+              toolCallId: toolCall.id,
+              name: toolName,
+              args: toolArgs
+            }
+          };
+        }
 
         // Execute the tool
         const result = await this.executeTool(toolName, toolArgs, context);

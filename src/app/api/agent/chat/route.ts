@@ -13,9 +13,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface ChatRequest {
-  message: string;
+  message?: string;
   conversationId?: string;
   orgId?: string;
+  confirmedToolCallId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -37,11 +38,12 @@ export async function POST(request: NextRequest) {
       message: userContent,
       conversationId: requestedConversationId,
       orgId,
+      confirmedToolCallId,
     } = body;
 
-    if (!userContent) {
+    if (!userContent && !confirmedToolCallId) {
       return NextResponse.json(
-        { error: "Invalid request: message required" },
+        { error: "Invalid request: message or confirmation required" },
         { status: 400 }
       );
     }
@@ -96,27 +98,33 @@ export async function POST(request: NextRequest) {
         supabase,
         user.id,
         membership.org_id,
-        userContent.substring(0, 50) + "..."
+        (userContent || "New Conversation").substring(0, 50) + "..."
       );
       conversationId = newConv.id;
     }
 
-    // 2. Save user message
-    const userMessage: OpenAI.Chat.ChatCompletionMessageParam = {
-      role: "user",
-      content: userContent,
-    };
+    // 2. Save user message (only if new content provided)
+    let messagesToProcess = history;
     
-    await conversationService.addMessage(supabase, conversationId!, userMessage);
+    if (userContent) {
+      const userMessage: OpenAI.Chat.ChatCompletionMessageParam = {
+        role: "user",
+        content: userContent,
+      };
+      
+      await conversationService.addMessage(supabase, conversationId!, userMessage);
+      messagesToProcess = [...history, userMessage];
+    }
 
     // 3. Process with agent (History + New Message)
     const result = await agentService.processMessage({
-      messages: [...history, userMessage],
+      messages: messagesToProcess,
       context: {
         userId: user.id,
         orgId: membership.org_id,
         supabase,
       },
+      confirmedToolCallId,
     });
 
     // 4. Save generated messages (Assistant response + Tool calls)
@@ -129,6 +137,7 @@ export async function POST(request: NextRequest) {
       message: result.message,
       toolCalls: result.toolCalls,
       conversationId,
+      confirmationRequired: result.confirmationRequired,
     });
   } catch (error) {
     console.error("Agent chat error:", error);
