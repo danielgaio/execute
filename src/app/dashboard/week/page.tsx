@@ -20,6 +20,8 @@ import { updateInstanceStatus } from "./actions";
 import Link from "next/link";
 import { cookies } from "next/headers";
 
+import ReviewWeekButton from "@/components/dashboard/review-week-button";
+
 // Type for the raw Supabase query result
 interface RawTacticInstance {
   id: string;
@@ -163,6 +165,7 @@ export default async function WeekPage() {
           </Typography>
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <ReviewWeekButton />
           <Paper sx={{ px: 3, py: 1 }}>
             <Typography variant="body2" color="text.secondary">
               Weekly Score

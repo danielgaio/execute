@@ -8,7 +8,7 @@ export default function EmptyCycleState() {
   const { openAgent } = useAgent();
 
   const handlePlanWithAI = () => {
-    openAgent("I want to plan my next 12-week cycle. Can you help me set up my vision, goals, and tactics?");
+    openAgent("Help me plan my next 12-week cycle. Please check my current planning status and guide me through the process.");
   };
 
   return (
