@@ -137,7 +137,7 @@ export default async function DashboardPage() {
         </Box>
         <Box sx={{ flex: 1, minWidth: 300 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240, overflow: 'auto' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography variant="h6" color="primary">
                 Today&apos;s Focus
               </Typography>

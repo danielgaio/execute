@@ -158,6 +158,13 @@ export default function AgentChat() {
       );
     }
 
+    if (request.name === 'get_daily_briefing') {
+      // This is an analysis tool, usually doesn't require confirmation, 
+      // but if it did, we'd render it here.
+      // Since it's read-only, it likely won't trigger this block unless configured to.
+      return null; 
+    }
+
     return (
       <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
         {JSON.stringify(request.args, null, 2)}
