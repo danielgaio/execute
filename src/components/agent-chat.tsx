@@ -16,6 +16,7 @@ import {
   Alert,
   Chip,
   Stack,
+  Snackbar,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
@@ -23,6 +24,7 @@ import PersonIcon from "@mui/icons-material/Person";
 
 import { useOrganization } from "@/contexts/organization-context";
 import { useAgent } from "@/contexts/agent-context";
+import { useRouter } from "next/navigation";
 
 interface Message {
   role: "user" | "assistant";
@@ -44,7 +46,9 @@ export default function AgentChat() {
   const [error, setError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ open: boolean; message: string; severity: "success" | "info" } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -116,6 +120,27 @@ export default function AgentChat() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Check for mutating tool calls and refresh if needed
+      if (data.toolCalls && data.toolCalls.length > 0) {
+        const hasMutatingAction = data.toolCalls.some((tool: any) => 
+          (tool.name.startsWith("create_") || 
+           tool.name.startsWith("update_") || 
+           tool.name.startsWith("delete_") ||
+           tool.name === "mark_tactic_complete" ||
+           tool.name === "defer_tactic") && 
+          tool.result?.success
+        );
+
+        if (hasMutatingAction) {
+          router.refresh();
+          setToast({
+            open: true,
+            message: "Dashboard updated successfully",
+            severity: "success",
+          });
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
       console.error(err);
@@ -179,6 +204,27 @@ export default function AgentChat() {
       // Update conversation ID if returned (for new conversations)
       if (data.conversationId) {
         setConversationId(data.conversationId);
+      }
+
+      // Check for mutating tool calls to refresh the dashboard
+      if (data.toolCalls && data.toolCalls.length > 0) {
+        const hasMutatingAction = data.toolCalls.some((tool: any) => 
+          (tool.name.startsWith("create_") || 
+           tool.name.startsWith("update_") || 
+           tool.name.startsWith("delete_") ||
+           tool.name === "mark_tactic_complete" ||
+           tool.name === "defer_tactic") && 
+          tool.result?.success
+        );
+
+        if (hasMutatingAction) {
+          router.refresh();
+          setToast({
+            open: true,
+            message: "Dashboard updated successfully",
+            severity: "success"
+          });
+        }
       }
 
       const assistantMessage: Message = {
@@ -383,6 +429,19 @@ export default function AgentChat() {
           <SendIcon />
         </IconButton>
       </Box>
+      {/* Toast Notification */}
+      {toast && (
+        <Snackbar
+          open={toast.open}
+          autoHideDuration={4000}
+          onClose={() => setToast(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        >
+          <Alert onClose={() => setToast(null)} severity={toast.severity} sx={{ width: '100%' }}>
+            {toast.message}
+          </Alert>
+        </Snackbar>
+      )}
     </Paper>
   );
 }
