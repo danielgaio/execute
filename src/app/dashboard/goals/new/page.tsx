@@ -11,7 +11,9 @@ import {
   Container,
   MenuItem,
 } from "@mui/material";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { createGoal } from "../actions";
+import { useAgent } from "@/contexts/agent-context";
 
 const UNITS = [
   { value: "count", label: "Count (e.g. # of calls)" },
@@ -23,6 +25,7 @@ const UNITS = [
 export default function CreateGoalPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { openAgent } = useAgent();
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -47,9 +50,18 @@ export default function CreateGoalPage() {
     <Container maxWidth="sm">
       <Box sx={{ mt: 4, mb: 4 }}>
         <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography component="h1" variant="h5" gutterBottom>
-            Define New Goal
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography component="h1" variant="h5" sx={{ mb: 0 }}>
+              Define New Goal
+            </Typography>
+            <Button
+              variant="outlined"
+              startIcon={<SmartToyIcon />}
+              onClick={() => openAgent("I need help defining a new goal for the current cycle. Can you help me identify a good Lag Indicator based on my Vision?")}
+            >
+              Draft with AI
+            </Button>
+          </Box>
           <Typography variant="body2" color="text.secondary" paragraph>
             Set a specific, measurable goal (Lag Indicator) for the current
             cycle.

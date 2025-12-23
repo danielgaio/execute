@@ -6,10 +6,12 @@ import {
   Chip,
   LinearProgress,
   Grid,
+  Stack,
 } from "@mui/material";
 import { Add as AddIcon } from "@mui/icons-material";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import PlanGoalsButton from "@/components/dashboard/plan-goals-button";
 
 interface Tactic {
   id: string;
@@ -98,20 +100,22 @@ export default async function GoalsPage() {
           </Typography>
         </Box>
         <Box>
-          <Link
-            href="/dashboard/tactics/new"
-            passHref
-            style={{ marginRight: 8 }}
-          >
-            <Button variant="outlined" startIcon={<AddIcon />}>
-              Add Tactic
-            </Button>
-          </Link>
-          <Link href="/dashboard/goals/new" passHref>
-            <Button variant="contained" startIcon={<AddIcon />}>
-              New Goal
-            </Button>
-          </Link>
+          <Stack direction="row" spacing={2}>
+            <PlanGoalsButton />
+            <Link
+              href="/dashboard/tactics/new"
+              passHref
+            >
+              <Button variant="outlined" startIcon={<AddIcon />}>
+                Add Tactic
+              </Button>
+            </Link>
+            <Link href="/dashboard/goals/new" passHref>
+              <Button variant="contained" startIcon={<AddIcon />}>
+                New Goal
+              </Button>
+            </Link>
+          </Stack>
         </Box>
       </Box>
 

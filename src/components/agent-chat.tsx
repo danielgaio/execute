@@ -81,6 +81,33 @@ export default function AgentChat() {
       );
     }
 
+    if (request.name === 'create_goal') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            Goal Preview:
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+            <Typography variant="subtitle2" gutterBottom>
+              {request.args.title as string}
+            </Typography>
+            {request.args.description && (
+              <Typography variant="body2" color="text.secondary" paragraph>
+                {request.args.description as string}
+              </Typography>
+            )}
+            <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+              <Chip label={`Target: ${request.args.target}`} size="small" />
+              <Chip label={`Unit: ${request.args.unit || 'count'}`} size="small" />
+              {request.args.target_date && (
+                <Chip label={`Due: ${request.args.target_date}`} size="small" variant="outlined" />
+              )}
+            </Stack>
+          </Paper>
+        </Box>
+      );
+    }
+
     return (
       <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
         {JSON.stringify(request.args, null, 2)}
