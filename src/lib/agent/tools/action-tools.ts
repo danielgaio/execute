@@ -396,6 +396,93 @@ export const deferTacticTool: AgentTool = {
   },
 };
 
+/**
+ * Update a tactic's configuration (weight, schedule, title)
+ */
+export const updateTacticTool: AgentTool = {
+  name: "update_tactic",
+  description:
+    "Update a tactic's configuration. Use this to change the weight (importance), reschedule (change due day), or update the title/description.",
+  category: "action",
+  requiresConfirmation: true,
+  parameters: z.object({
+    tactic_id: z.string().describe("The ID of the tactic to update"),
+    title: z.string().optional().describe("New title"),
+    description: z.string().optional().describe("New description"),
+    weight: z.number().optional().describe("New weight (0.1 to 1.0)"),
+    due_day: z.number().min(1).max(7).optional().describe("New due day (1=Monday, 7=Sunday)"),
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      // Capture state before modification
+      const beforeState = await captureEntityState(
+        context.supabase,
+        "tactics",
+        params.tactic_id as string
+      );
+
+      const updates: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (params.title) updates.title = params.title;
+      if (params.description) updates.description = params.description;
+      if (params.weight !== undefined) updates.weight = params.weight;
+      if (params.due_day !== undefined) updates.due_days = [params.due_day];
+
+      const { error } = await context.supabase
+        .from("tactics")
+        .update(updates)
+        .eq("id", params.tactic_id)
+        .eq("org_id", context.orgId);
+
+      if (error) throw error;
+
+      // Fetch updated tactic
+      const { data: tactic } = await context.supabase
+        .from("tactics")
+        .select("*")
+        .eq("id", params.tactic_id)
+        .single();
+
+      // Re-index if content changed
+      if (params.title || params.description || params.weight) {
+        await embeddingService.indexTactic(context.supabase, tactic, context.orgId!);
+      }
+
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "update_tactic",
+        action: "update",
+        entityType: "tactic",
+        entityId: params.tactic_id as string,
+        beforeState,
+        afterState: tactic,
+        metadata: {
+          confirmed: true,
+          updates: params,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          tactic,
+          message: `✅ Updated tactic "${tactic.title}"`,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to update tactic",
+      };
+    }
+  },
+};
+
 // Export all action tools
 export const actionTools = [
   createCycleTool,
@@ -403,4 +490,5 @@ export const actionTools = [
   createTacticTool,
   markTacticCompleteTool,
   deferTacticTool,
+  updateTacticTool,
 ];

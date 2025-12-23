@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool } from "./action-tools";
+import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool, updateTacticTool } from "./action-tools";
 import * as auditService from "../audit-service";
 import * as embeddingService from "../embedding-service";
 import * as planningUtils from "@/utils/planning";
@@ -181,6 +181,40 @@ describe("Action Tools", () => {
           action: "update",
           entityType: "tactic_instance",
           metadata: expect.objectContaining({ defer_reason: "Too busy" }),
+        })
+      );
+    });
+  });
+
+  describe("update_tactic", () => {
+    it("should update tactic and log action", async () => {
+      const mockTactic = { id: "tactic-1", title: "New Title", weight: 0.5 };
+      
+      // Mock update response
+      mockSupabase.update.mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) });
+      
+      // Mock select response
+      mockSupabase.select.mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: mockTactic, error: null }) }) });
+
+      const result = await updateTacticTool.handler(
+        { tactic_id: "tactic-1", title: "New Title", weight: 0.5, due_day: 1 },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSupabase.from).toHaveBeenCalledWith("tactics");
+      expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+        title: "New Title",
+        weight: 0.5,
+        due_days: [1],
+      }));
+      expect(embeddingService.embeddingService.indexTactic).toHaveBeenCalled();
+      expect(auditService.logAgentAction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "update",
+          entityType: "tactic",
+          metadata: expect.objectContaining({ confirmed: true }),
         })
       );
     });
