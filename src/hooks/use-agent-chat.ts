@@ -199,22 +199,56 @@ export function useAgentChat() {
     }
   };
 
-  const cancelAction = () => {
+  const cancelAction = async () => {
+    if (!confirmationRequest || isLoading) return;
+
+    const toolCallId = confirmationRequest.toolCallId;
     setConfirmationRequest(null);
-    // Optionally send a message saying "Cancelled"
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        content: "Action cancelled.",
-        timestamp: new Date(),
-      },
-      {
-        role: "assistant",
-        content: "Okay, I've cancelled that action. What would you like to do instead?",
-        timestamp: new Date(),
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          orgId: currentOrg?.id,
+          cancelledToolCallId: toolCallId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel action");
       }
-    ]);
+
+      // Handle response
+      if (data.confirmationRequired) {
+        setConfirmationRequest(data.confirmationRequired);
+      }
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: data.message,
+        timestamp: new Date(),
+        toolCalls: data.toolCalls,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (data.toolCalls) {
+        handleMutatingActions(data.toolCalls);
+      }
+    } catch (err) {
+      console.error("Cancellation error:", err);
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Initialize with greeting or initial message

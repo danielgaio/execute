@@ -17,6 +17,7 @@ interface ChatRequest {
   conversationId?: string;
   orgId?: string;
   confirmedToolCallId?: string;
+  cancelledToolCallId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -39,11 +40,12 @@ export async function POST(request: NextRequest) {
       conversationId: requestedConversationId,
       orgId,
       confirmedToolCallId,
+      cancelledToolCallId,
     } = body;
 
-    if (!userContent && !confirmedToolCallId) {
+    if (!userContent && !confirmedToolCallId && !cancelledToolCallId) {
       return NextResponse.json(
-        { error: "Invalid request: message or confirmation required" },
+        { error: "Invalid request: message or confirmation/cancellation required" },
         { status: 400 }
       );
     }
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
         supabase,
       },
       confirmedToolCallId,
+      cancelledToolCallId,
     });
 
     // 4. Save generated messages (Assistant response + Tool calls)

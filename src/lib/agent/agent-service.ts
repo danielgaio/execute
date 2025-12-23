@@ -12,6 +12,7 @@ import { actionTools } from "./tools/action-tools";
 import { analysisTools } from "./tools/analysis-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
+import { logAgentAction } from "./audit-service";
 
 /**
  * System prompt that defines the agent's personality and behavior
@@ -127,6 +128,7 @@ export class AgentService {
     context: ToolContext;
     maxIterations?: number;
     confirmedToolCallId?: string;
+    cancelledToolCallId?: string;
   }): Promise<{
     message: string;
     toolCalls?: {
@@ -142,7 +144,7 @@ export class AgentService {
       args: Record<string, unknown>;
     };
   }> {
-    const { messages, context, maxIterations = 5, confirmedToolCallId } = params;
+    const { messages, context, maxIterations = 5, confirmedToolCallId, cancelledToolCallId } = params;
 
     // Retrieve relevant context using RAG
     let contextMessage = "";
@@ -210,6 +212,42 @@ ${relevantDocs
         
         // Check confirmation
         if (tool?.requiresConfirmation) {
+          // Handle Cancellation
+          if (toolCall.id === cancelledToolCallId) {
+            const result = { success: false, error: "User cancelled this action." };
+            
+            // Log cancellation
+            if (context.orgId) {
+              await logAgentAction(context.supabase, {
+                userId: (await context.supabase.auth.getUser()).data.user?.id || "unknown",
+                orgId: context.orgId,
+                toolName,
+                action: "agent_tool_call",
+                entityType: "tool_execution",
+                entityId: toolCall.id,
+                metadata: { 
+                  status: "cancelled",
+                  args: toolArgs
+                }
+              });
+            }
+
+            toolCallHistory.push({
+              name: toolName,
+              args: toolArgs,
+              result,
+            });
+
+            const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = { 
+              role: 'tool', 
+              tool_call_id: toolCall.id, 
+              content: JSON.stringify(result) 
+            };
+            toolResults.push(toolMessage);
+            generatedMessages.push(toolMessage);
+            continue; // Skip execution
+          }
+
           if (toolCall.id !== confirmedToolCallId) {
             // Not confirmed yet
             return {
@@ -221,6 +259,22 @@ ${relevantDocs
                 args: toolArgs
               }
             };
+          }
+
+          // Log confirmation
+          if (context.orgId) {
+            await logAgentAction(context.supabase, {
+              userId: (await context.supabase.auth.getUser()).data.user?.id || "unknown",
+              orgId: context.orgId,
+              toolName,
+              action: "agent_tool_call",
+              entityType: "tool_execution",
+              entityId: toolCall.id,
+              metadata: { 
+                status: "confirmed",
+                args: toolArgs
+              }
+            });
           }
         }
         

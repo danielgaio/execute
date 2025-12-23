@@ -227,7 +227,7 @@ export default function AgentChat() {
               </Box>
             </CardContent>
             <CardActions>
-              <Button size="small" color="inherit" onClick={cancelAction}>
+              <Button size="small" color="inherit" onClick={cancelAction} disabled={isLoading}>
                 Cancel
               </Button>
               <Button size="small" variant="contained" color="warning" onClick={confirmAction} disabled={isLoading}>
