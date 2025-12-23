@@ -68,9 +68,9 @@ create policy "Org members can view audit logs" on public.audit_log
     )
   );
 
--- RLS: Only system/service role can insert audit logs (prevents tampering)
-create policy "System can insert audit logs" on public.audit_log
-  for insert with check (true); -- Will be called from triggers with SECURITY DEFINER
+-- RLS: No INSERT policy for authenticated users.
+-- Inserts are handled exclusively by triggers and functions with SECURITY DEFINER.
+-- This ensures users cannot manually insert fake audit logs.
 
 -- =========================
 -- 2. Entity Version Tables
