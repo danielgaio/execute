@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getWeekStart } from "@/utils/planning";
+import { calculateLeadScore, type ScorableItem } from "@/lib/domain/scoring";
 
 /**
  * Get a daily briefing for the user
@@ -21,7 +22,7 @@ export const getDailyBriefingTool: AgentTool = {
       // 1. Get Active Cycle
       const { data: activeCycle } = await context.supabase
         .from("cycles")
-        .select("id, title, end_date")
+        .select("id, title, start_date, end_date")
         .eq("org_id", context.orgId)
         .eq("status", "active")
         .single();
@@ -47,9 +48,7 @@ export const getDailyBriefingTool: AgentTool = {
         .eq("due_date", today)
         .eq("planned", true);
 
-      // 3. Get Overdue Tactics (Previous days in this week that are not done)
-      // Note: This is a simplified check. Ideally we check all past uncompleted instances.
-      // For now, we'll check instances in the current week before today.
+      // 3. Get Overdue Tactics (All past uncompleted instances in this cycle)
       const { data: weekInstances } = await context.supabase
         .from("tactic_instances")
         .select(`
@@ -57,34 +56,30 @@ export const getDailyBriefingTool: AgentTool = {
           tactics ( id, title, weight )
         `)
         .eq("org_id", context.orgId)
-        .eq("week_start", weekStart)
         .eq("planned", true)
         .lt("due_date", today)
+        .gte("due_date", activeCycle.start_date)
         .neq("status", "done");
 
       // 4. Calculate Current Weekly Score
       const { data: allWeekInstances } = await context.supabase
         .from("tactic_instances")
         .select(`
-          status,
+          id, status, planned,
           tactics ( weight )
         `)
         .eq("org_id", context.orgId)
         .eq("week_start", weekStart)
         .eq("planned", true);
 
-      let totalWeight = 0;
-      let completedWeight = 0;
-      if (allWeekInstances) {
-        for (const inst of allWeekInstances) {
-          const weight = inst.tactics?.weight || 1.0;
-          totalWeight += weight;
-          if (inst.status === 'done') {
-            completedWeight += weight;
-          }
-        }
-      }
-      const currentScore = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 100;
+      const scorableItems: ScorableItem[] = (allWeekInstances || []).map((inst: any) => ({
+        id: inst.id,
+        status: inst.status,
+        weight: inst.tactics?.weight || 1.0,
+        planned: inst.planned
+      }));
+
+      const currentScore = calculateLeadScore(scorableItems);
 
       // 5. Days remaining in cycle
       const daysRemaining = Math.ceil((new Date(activeCycle.end_date).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24));
