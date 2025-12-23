@@ -3,6 +3,7 @@ import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getWeekStart } from "@/utils/planning";
 import { logAgentAction } from "../audit-service";
 import { embeddingService } from "../embedding-service";
+import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/lib/domain/scoring";
 
 /**
  * Get context for a Weekly Progress Review (WPR)
@@ -42,27 +43,23 @@ export const getWPRContextTool: AgentTool = {
         .eq("week_start", weekStart)
         .eq("planned", true);
 
-      // 3. Calculate Lead Score
-      let totalWeight = 0;
-      let completedWeight = 0;
-      const tacticDetails = [];
+      // 3. Calculate Lead Score using Domain Logic
+      const scorableItems: ScorableItem[] = (instances || []).map((inst: any) => ({
+        id: inst.id,
+        status: inst.status,
+        weight: inst.tactics?.weight || 1.0,
+        planned: inst.planned
+      }));
 
-      if (instances) {
-        for (const inst of instances) {
-          const weight = inst.tactics?.weight || 1.0;
-          totalWeight += weight;
-          if (inst.status === 'done') {
-            completedWeight += weight;
-          }
-          tacticDetails.push({
-            title: inst.tactics?.title,
-            status: inst.status,
-            weight: weight
-          });
-        }
-      }
+      const leadScore = calculateLeadScore(scorableItems);
+      const performance = getPerformanceStatus(leadScore);
 
-      const leadScore = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 100;
+      // Prepare details for the agent
+      const tacticDetails = (instances || []).map((inst: any) => ({
+        title: inst.tactics?.title,
+        status: inst.status,
+        weight: inst.tactics?.weight || 1.0
+      }));
 
       // 4. Get Goals Status
       const { data: goals } = await context.supabase
@@ -76,14 +73,15 @@ export const getWPRContextTool: AgentTool = {
           weekStart,
           cycle: activeCycle.title,
           leadScore,
+          performance,
           stats: {
             totalTactics: instances?.length || 0,
-            completedTactics: instances?.filter(i => i.status === 'done').length || 0,
+            completedTactics: instances?.filter((i: any) => i.status === 'done').length || 0,
             completionRate: `${leadScore}%`
           },
           tacticDetails,
           goals: goals || [],
-          message: `WPR Context loaded. Lead Score: ${leadScore}%.`
+          message: `WPR Context loaded. Lead Score: ${leadScore}% (${performance}).`
         }
       };
     } catch (error: any) {
