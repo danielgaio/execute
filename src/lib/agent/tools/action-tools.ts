@@ -483,6 +483,99 @@ export const updateTacticTool: AgentTool = {
   },
 };
 
+/**
+ * Create or update the vision for the organization
+ */
+export const createVisionTool: AgentTool = {
+  name: "create_vision",
+  description: "Create or update the long-term vision for the organization.",
+  category: "action",
+  requiresConfirmation: true,
+  parameters: z.object({
+    content: z.string().describe("The vision statement in Markdown format"),
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      // Check if vision exists
+      const { data: existingVision } = await context.supabase
+        .from("visions")
+        .select("*")
+        .eq("org_id", context.orgId)
+        .single();
+
+      let vision;
+      let actionType = "create";
+      let oldState = null;
+
+      if (existingVision) {
+        actionType = "update";
+        oldState = existingVision;
+        // Update existing vision
+        const { data, error } = await context.supabase
+          .from("visions")
+          .update({
+            content_md: params.content,
+            version: existingVision.version + 1,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingVision.id)
+          .select()
+          .single();
+        
+        if (error) throw error;
+        vision = data;
+      } else {
+        // Create new vision
+        const { data, error } = await context.supabase
+          .from("visions")
+          .insert({
+            org_id: context.orgId,
+            user_id: context.userId,
+            content_md: params.content,
+            version: 1,
+          })
+          .select()
+          .single();
+          
+        if (error) throw error;
+        vision = data;
+      }
+
+      // Index for RAG
+      await embeddingService.indexVision(context.supabase, vision, context.orgId!);
+
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "create_vision",
+        action: actionType as "create" | "update",
+        entityType: "vision",
+        entityId: vision.id,
+        beforeState: oldState,
+        afterState: vision,
+        metadata: {
+          confirmed: true,
+          content_length: params.content.length
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          vision,
+          message: `✅ Vision ${actionType}d successfully.`,
+        }
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  },
+};
+
 // Export all action tools
 export const actionTools = [
   createCycleTool,
@@ -491,4 +584,5 @@ export const actionTools = [
   markTacticCompleteTool,
   deferTacticTool,
   updateTacticTool,
+  createVisionTool,
 ];

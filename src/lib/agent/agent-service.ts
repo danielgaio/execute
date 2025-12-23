@@ -10,6 +10,7 @@ import { toolToOpenAIFunction } from "./types";
 import { queryTools } from "./tools/query-tools";
 import { actionTools } from "./tools/action-tools";
 import { analysisTools } from "./tools/analysis-tools";
+import { planningTools } from "./tools/planning-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 import { logAgentAction } from "./audit-service";
@@ -71,7 +72,7 @@ export class AgentService {
    * Register all available tools
    */
   private registerTools(): void {
-    const allTools = [...queryTools, ...actionTools, ...analysisTools];
+    const allTools = [...queryTools, ...actionTools, ...analysisTools, ...planningTools];
 
     for (const tool of allTools) {
       this.tools.set(tool.name, tool);
