@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { switchOrganization } from "@/app/dashboard/actions";
 
 export interface Organization {
   id: string;
@@ -78,11 +79,13 @@ export function OrganizationProvider({
     }
   };
 
-  const switchOrg = (orgId: string) => {
+  const switchOrg = async (orgId: string) => {
     const org = organizations.find((o) => o.id === orgId);
     if (org) {
       setCurrentOrg(org);
-      // Optionally persist preference to local storage or DB profile
+      // Persist to cookie via Server Action
+      await switchOrganization(orgId);
+      // Also keep local storage for client-side fallback
       localStorage.setItem("last_org_id", orgId);
     }
   };

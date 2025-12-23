@@ -4,6 +4,7 @@ import CreateOrganizationForm from './organizations/create-form'
 import Link from 'next/link'
 import { toggleInstanceStatus } from './actions'
 import { getWeekStart } from '@/utils/planning'
+import { cookies } from 'next/headers'
 
 interface TacticInstance {
   id: string
@@ -40,11 +41,20 @@ export default async function DashboardPage() {
     return <CreateOrganizationForm />
   }
 
+  // Determine active org from cookie or default to first
+  const cookieStore = await cookies()
+  const activeOrgId = cookieStore.get('execute_active_org')?.value
+  
+  // Verify the user is actually a member of the cookie org
+  const currentOrgId = activeOrgId && memberships.some(m => m.org_id === activeOrgId) 
+    ? activeOrgId 
+    : memberships[0].org_id
+
   // Fetch active cycle
   const { data: activeCycle } = await supabase
     .from('cycles')
     .select('*')
-    .eq('org_id', memberships[0].org_id)
+    .eq('org_id', currentOrgId)
     .eq('status', 'active')
     .order('created_at', { ascending: false })
     .single()
@@ -59,7 +69,7 @@ export default async function DashboardPage() {
         title
       )
     `)
-    .eq('org_id', memberships[0].org_id)
+    .eq('org_id', currentOrgId)
     .eq('due_date', today)
     .order('status', { ascending: false })
 
@@ -74,7 +84,7 @@ export default async function DashboardPage() {
         weight
       )
     `)
-    .eq('org_id', memberships[0].org_id)
+    .eq('org_id', currentOrgId)
     .eq('week_start', weekStart)
     .eq('planned', true)
 

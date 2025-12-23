@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import DashboardShell from '@/components/dashboard-shell'
 import { OrganizationProvider } from '@/contexts/organization-context'
+import { cookies } from 'next/headers'
 
 export default async function DashboardLayout({
   children,
@@ -9,6 +10,8 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
+  const cookieStore = await cookies()
+  const activeOrgId = cookieStore.get('execute_active_org')?.value
 
   const {
     data: { user },
@@ -55,7 +58,15 @@ export default async function DashboardLayout({
   // We will handle the redirect logic in the page or middleware, but for now,
   // we pass the data to the provider.
 
-  const initialCurrentOrg = organizations.length > 0 ? organizations[0] : null
+  // Determine initial active org
+  let initialCurrentOrg = null
+  if (organizations.length > 0) {
+    if (activeOrgId) {
+      initialCurrentOrg = organizations.find((o: any) => o.id === activeOrgId) || organizations[0]
+    } else {
+      initialCurrentOrg = organizations[0]
+    }
+  }
 
   return (
     <OrganizationProvider 

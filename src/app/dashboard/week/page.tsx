@@ -18,6 +18,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getWeekStart } from "@/utils/planning";
 import { updateInstanceStatus } from "./actions";
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 // Type for the raw Supabase query result
 interface RawTacticInstance {
@@ -54,13 +55,29 @@ export default async function WeekPage() {
 
   if (!user) return null;
 
-  const { data: membership } = await supabase
+  // Get user's organization
+  const { data: memberships } = await supabase
     .from("org_members")
     .select("org_id")
-    .eq("user_id", user.id)
-    .single();
+    .eq("user_id", user.id);
 
-  if (!membership) return null;
+  if (!memberships || memberships.length === 0) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography>No organization found.</Typography>
+      </Box>
+    );
+  }
+
+  // Determine active org from cookie or default to first
+  const cookieStore = await cookies();
+  const activeOrgId = cookieStore.get("execute_active_org")?.value;
+
+  // Verify the user is actually a member of the cookie org
+  const currentOrgId =
+    activeOrgId && memberships.some((m) => m.org_id === activeOrgId)
+      ? activeOrgId
+      : memberships[0].org_id;
 
   const weekStart = getWeekStart();
   const weekStartStr = weekStart.toISOString().split("T")[0];
@@ -83,7 +100,7 @@ export default async function WeekPage() {
       )
     `
     )
-    .eq("org_id", membership.org_id)
+    .eq("org_id", currentOrgId)
     .eq("week_start", weekStartStr)
     .order("due_date", { ascending: true });
 
