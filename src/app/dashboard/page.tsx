@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { toggleInstanceStatus } from './actions'
 import { getWeekStart } from '@/utils/planning'
 import { cookies } from 'next/headers'
+import EmptyCycleState from '@/components/dashboard/empty-cycle-state'
 
 interface TacticInstance {
   id: string
@@ -129,16 +130,7 @@ export default async function DashboardPage() {
                 </Typography>
               </Box>
             ) : (
-              <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography variant="body1" paragraph>
-                  No active cycle found. Start planning your next 12 weeks!
-                </Typography>
-                <Link href="/dashboard/cycles/new" passHref>
-                  <Button variant="contained" size="small">
-                    Plan New Cycle
-                  </Button>
-                </Link>
-              </Box>
+              <EmptyCycleState />
             )}
           </Paper>
         </Box>

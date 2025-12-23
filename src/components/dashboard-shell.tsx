@@ -39,6 +39,7 @@ import { logout } from "@/app/dashboard/actions";
 import { useRouter, usePathname } from "next/navigation";
 import AgentChat from "./agent-chat";
 import { useOrganization } from "@/contexts/organization-context";
+import { AgentProvider, useAgent } from "@/contexts/agent-context";
 
 const drawerWidth = 240;
 const agentDrawerWidth = 400;
@@ -52,14 +53,22 @@ interface DashboardShellProps {
   };
 }
 
-export default function DashboardShell({
+export default function DashboardShell(props: DashboardShellProps) {
+  return (
+    <AgentProvider>
+      <DashboardShellContent {...props} />
+    </AgentProvider>
+  );
+}
+
+function DashboardShellContent({
   children,
   user,
 }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [orgAnchorEl, setOrgAnchorEl] = useState<null | HTMLElement>(null);
-  const [agentOpen, setAgentOpen] = useState(false);
+  const { isOpen: agentOpen, toggleAgent } = useAgent();
   const router = useRouter();
   const pathname = usePathname();
   const { organizations, currentOrg, switchOrg } = useOrganization();
@@ -102,10 +111,6 @@ export default function DashboardShell({
   const handleLogout = async () => {
     handleClose();
     await logout();
-  };
-
-  const toggleAgent = () => {
-    setAgentOpen(!agentOpen);
   };
 
   const menuItems = [
