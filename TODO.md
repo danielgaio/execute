@@ -18,6 +18,7 @@
 - [x] Build agent query tools: `list_due_items`, `query_scores`, `summarize_progress`
 - [x] Build advanced query tools: `explain_status`, `compare_cycles`, `find_blockers`
 - [x] Create agent action tools (with confirmation): `assign_tactic`, `defer_task`, `mark_complete`
+- [x] Write integration tests for Agent Service (Confirmation/Cancellation flow)
 - [ ] Create advanced action tools: `reschedule_tactic`, `update_weight`
 - [x] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
@@ -27,7 +28,7 @@
 
 - [ ] Design and deploy Supabase schema with core tables: `organizations`, `org_members`, `teams`, `team_members`, `cycles`, `visions`, `goals`, `tactics`, `tactic_instances`, `weekly_plans`
 - [ ] Implement comprehensive RLS policies for all tables enforcing org_id/team_id boundaries
-- [ ] Write unit tests for RLS policies to prevent cross-tenant data leakage
+- [x] Write unit tests for RLS policies to prevent cross-tenant data leakage
 - [x] Set up audit_log table with triggers for entity versioning and agent action tracking ✅ **COMPLETED** (Dec 23, 2025)
   - Created comprehensive audit logging system with immutable append-only log
   - Implemented automatic triggers for all critical entities (cycles, goals, tactics, instances, visions, weekly_plans)
