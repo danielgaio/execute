@@ -101,7 +101,6 @@ export const submitWPRTool: AgentTool = {
   parameters: z.object({
     week_start: z.string().describe("The start date of the week being reviewed (YYYY-MM-DD)."),
     notes: z.string().describe("Qualitative notes, decisions, and analysis of the week."),
-    lead_score: z.number().describe("The final calculated lead score (0-100)."),
     lag_status: z.string().describe("Summary of goal status (e.g., 'All on track')."),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
@@ -116,7 +115,28 @@ export const submitWPRTool: AgentTool = {
 
       if (!activeCycle) throw new Error("No active cycle found.");
 
-      // 2. Check if WPR already exists
+      // 2. Recalculate Lead Score (Server-Side Validation)
+      // We do NOT trust the agent's passed score. We recalculate it from the DB.
+      const { data: instances } = await context.supabase
+        .from("tactic_instances")
+        .select(`
+          id, status, planned,
+          tactics ( weight )
+        `)
+        .eq("org_id", context.orgId)
+        .eq("week_start", params.week_start)
+        .eq("planned", true);
+
+      const scorableItems: ScorableItem[] = (instances || []).map((inst: any) => ({
+        id: inst.id,
+        status: inst.status,
+        weight: inst.tactics?.weight || 1.0,
+        planned: inst.planned
+      }));
+
+      const calculatedLeadScore = calculateLeadScore(scorableItems);
+
+      // 3. Check if WPR already exists
       const { data: existingWPR } = await context.supabase
         .from("weekly_reviews")
         .select("id")
@@ -133,7 +153,7 @@ export const submitWPRTool: AgentTool = {
         const { data, error } = await context.supabase
           .from("weekly_reviews")
           .update({
-            lead_score: params.lead_score,
+            lead_score: calculatedLeadScore,
             lag_status: params.lag_status,
             notes: params.notes,
             updated_at: new Date().toISOString()
@@ -150,7 +170,7 @@ export const submitWPRTool: AgentTool = {
             org_id: context.orgId,
             cycle_id: activeCycle.id,
             week_start: params.week_start,
-            lead_score: params.lead_score,
+            lead_score: calculatedLeadScore,
             lag_status: params.lag_status,
             notes: params.notes,
             created_by: context.userId
@@ -161,9 +181,9 @@ export const submitWPRTool: AgentTool = {
         wpr = data;
       }
 
-      // 3. Index for RAG
+      // 4. Index for RAG
       const content = `Weekly Review (${params.week_start})
-Score: ${params.lead_score}%
+Score: ${calculatedLeadScore}%
 Goals: ${params.lag_status}
 Notes: ${params.notes}`;
       
@@ -179,7 +199,7 @@ Notes: ${params.notes}`;
         context.orgId!
       );
 
-      // 4. Audit Log
+      // 5. Audit Log
       await logAgentAction(context.supabase, {
         org_id: context.orgId!,
         actor_user_id: context.userId!,
@@ -189,14 +209,14 @@ Notes: ${params.notes}`;
         details: {
           tool: "submit_wpr",
           action: actionType,
-          score: params.lead_score
+          score: calculatedLeadScore
         }
       });
 
       return {
         success: true,
         data: wpr,
-        message: `Weekly Review ${actionType}d successfully.`
+        message: `Weekly Review ${actionType}d successfully. Validated Score: ${calculatedLeadScore}%.`
       };
 
     } catch (error: any) {

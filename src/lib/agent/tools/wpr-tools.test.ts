@@ -1,10 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getWPRContextTool } from "./wpr-tools";
+import { getWPRContextTool, submitWPRTool } from "./wpr-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 // Mock dependencies
 vi.mock("@/utils/planning", () => ({
   getWeekStart: vi.fn().mockReturnValue(new Date("2025-01-01")),
+}));
+
+vi.mock("../embedding-service", () => ({
+  embeddingService: {
+    storeEmbedding: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+vi.mock("../audit-service", () => ({
+  logAgentAction: vi.fn().mockResolvedValue(true),
 }));
 
 describe("WPR Tools", () => {
@@ -79,6 +89,61 @@ describe("WPR Tools", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("No active cycle");
+    });
+  });
+
+  describe("submit_wpr", () => {
+    it("should recalculate score and save WPR", async () => {
+      // Mock Active Cycle
+      mockSupabase.single.mockResolvedValueOnce({ data: { id: "cycle-1" }, error: null });
+
+      // Mock Tactic Instances for Recalculation
+      // 1 Done (weight 1), 1 Pending (weight 1). Score 50%.
+      const mockInstances = [
+        { id: "1", status: "done", planned: true, tactics: { weight: 1.0 } },
+        { id: "2", status: "pending", planned: true, tactics: { weight: 1.0 } },
+      ];
+
+      // Mock Existing WPR (null = create new)
+      mockSupabase.single.mockResolvedValueOnce({ data: null, error: null });
+
+      // Mock Insert Return
+      mockSupabase.single.mockResolvedValueOnce({ data: { id: "wpr-1" }, error: null });
+
+      // Setup chain
+      mockSupabase.from.mockImplementation((table: string) => {
+        if (table === "cycles") return mockSupabase;
+        if (table === "tactic_instances") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            then: (resolve: any) => resolve({ data: mockInstances, error: null })
+          } as any;
+        }
+        if (table === "weekly_reviews") return mockSupabase;
+        return mockSupabase;
+      });
+
+      // Ensure insert is mocked on the main object for weekly_reviews
+      mockSupabase.insert = vi.fn().mockReturnThis();
+
+      const result = await submitWPRTool.handler({
+        week_start: "2025-01-01",
+        notes: "Good week",
+        lead_score: 99, // Agent tries to cheat with 99%
+        lag_status: "On track"
+      }, mockContext);
+
+      if (!result.success) {
+        console.error("Test Failure Error:", result.error);
+      }
+
+      expect(result.success).toBe(true);
+      // Verify that the INSERT used the calculated score (50), not the agent's score (99)
+      expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+        lead_score: 50,
+        notes: "Good week"
+      }));
     });
   });
 });
