@@ -159,7 +159,7 @@ export default async function WeekPage() {
         }}
       >
         <Box>
-          <Typography variant="h4">Week View</Typography>
+          <Typography variant="h4">Weekly Execution</Typography>
           <Typography variant="subtitle1" color="text.secondary">
             Week of {formatDate(weekStartStr)}
           </Typography>

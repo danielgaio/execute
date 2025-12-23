@@ -132,6 +132,32 @@ export default function AgentChat() {
       );
     }
 
+    if (request.name === 'submit_wpr') {
+      return (
+        <Box sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary" gutterBottom>
+            WPR Summary:
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+            <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+              <Chip 
+                label={`Lead Score: ${request.args.lead_score}%`} 
+                color={Number(request.args.lead_score) >= 85 ? "success" : "warning"} 
+                size="small" 
+              />
+              <Chip label={`Week: ${request.args.week_start}`} size="small" variant="outlined" />
+            </Stack>
+            <Typography variant="subtitle2" gutterBottom>
+              Notes & Decisions:
+            </Typography>
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+              {request.args.notes as string}
+            </Typography>
+          </Paper>
+        </Box>
+      );
+    }
+
     return (
       <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
         {JSON.stringify(request.args, null, 2)}
