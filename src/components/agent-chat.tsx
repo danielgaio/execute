@@ -20,7 +20,6 @@ import {
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
-import type OpenAI from "openai";
 
 interface Message {
   role: "user" | "assistant";

@@ -1,4 +1,3 @@
-import { createClient } from "@/utils/supabase/server";
 import { createEmbedding } from "../openai";
 import { SupabaseClient } from "@supabase/supabase-js";
 
@@ -6,7 +5,7 @@ export interface EmbeddingMetadata {
   entity_type: "cycle" | "goal" | "tactic" | "vision" | "wpr" | "note";
   entity_id: string;
   title?: string;
-  [key: string]: any;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 export class EmbeddingService {
@@ -85,7 +84,7 @@ export class EmbeddingService {
   /**
    * Index a Cycle entity
    */
-  async indexCycle(supabase: SupabaseClient, cycle: any, orgId: string) {
+  async indexCycle(supabase: SupabaseClient, cycle: { id: string; title: string; status: string; start_date: string; end_date: string }, orgId: string) {
     const content = `Cycle: ${cycle.title}
 Status: ${cycle.status}
 Dates: ${cycle.start_date} to ${cycle.end_date}
@@ -106,7 +105,7 @@ Description: A 12-week execution cycle.`;
   /**
    * Index a Goal entity
    */
-  async indexGoal(supabase: SupabaseClient, goal: any, orgId: string) {
+  async indexGoal(supabase: SupabaseClient, goal: { id: string; title: string; description?: string | null; status: string; target: number; unit?: string | null; target_date?: string | null; baseline: number; cycle_id: string }, orgId: string) {
     const content = `Goal: ${goal.title}
 Description: ${goal.description || "No description"}
 Status: ${goal.status}
@@ -129,7 +128,7 @@ Baseline: ${goal.baseline}`;
   /**
    * Index a Tactic entity
    */
-  async indexTactic(supabase: SupabaseClient, tactic: any, orgId: string) {
+  async indexTactic(supabase: SupabaseClient, tactic: { id: string; title: string; description?: string | null; status: string; weight: number; recurrence: string; goal_id: string }, orgId: string) {
     const content = `Tactic: ${tactic.title}
 Description: ${tactic.description || "No description"}
 Status: ${tactic.status}
@@ -152,7 +151,7 @@ Recurrence: ${tactic.recurrence}`;
   /**
    * Index a Vision entity
    */
-  async indexVision(supabase: SupabaseClient, vision: any, orgId: string) {
+  async indexVision(supabase: SupabaseClient, vision: { id: string; content_md?: string | null }, orgId: string) {
     const content = `Vision:
 ${vision.content_md}`;
 

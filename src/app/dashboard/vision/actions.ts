@@ -34,8 +34,6 @@ export async function saveVision(formData: FormData) {
     .eq('user_id', user.id)
     .single()
 
-  let visionId = existingVision?.id
-
   if (existingVision) {
     // Update existing vision with new version
     const { data: updatedVision, error } = await supabase

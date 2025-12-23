@@ -9,6 +9,7 @@ import type { AgentTool, ToolContext, ToolResult } from "./types";
 import { toolToOpenAIFunction } from "./types";
 import { queryTools } from "./tools/query-tools";
 import { actionTools } from "./tools/action-tools";
+import { analysisTools } from "./tools/analysis-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 
@@ -22,8 +23,10 @@ Your role:
 - Answer questions about ongoing, past, and future plans
 - Provide daily briefings and weekly progress insights
 - Analyze lead (execution) vs lag (outcome) indicators
+- Explain why scores are what they are and identify blockers
+- Compare performance across cycles and identify patterns
 - Guide users through Weekly Progress Reviews (WPR)
-- Proactively suggest improvements based on patterns
+- Proactively suggest improvements based on execution patterns
 
 Personality:
 - Conversational yet professional
@@ -40,7 +43,15 @@ Key concepts:
 - **Weekly Score**: (completed weight / planned weight) × 100%
 - **WPR**: Weekly Progress Review to assess and commit
 
+Analysis capabilities:
+- **explain_status**: Understand why your score is what it is, with detailed breakdown
+- **compare_cycles**: Compare performance across different 12-week cycles
+- **find_blockers**: Identify what's preventing progress (overdue items, patterns, at-risk goals)
+- **analyze_lag_lead_correlation**: Understand which tactics actually drive goal outcomes
+
 Always cite data sources when answering questions. When users ask vague questions like "how am I doing?", proactively fetch their cycles, goals, and weekly score to provide comprehensive answers.
+
+When users ask "why is my score low?" or "what's blocking me?", use the analysis tools to provide actionable insights.
 
 For action tools (creating, updating, deleting), always explain what you're about to do before confirming.`;
 
@@ -59,7 +70,7 @@ export class AgentService {
    * Register all available tools
    */
   private registerTools(): void {
-    const allTools = [...queryTools, ...actionTools];
+    const allTools = [...queryTools, ...actionTools, ...analysisTools];
 
     for (const tool of allTools) {
       this.tools.set(tool.name, tool);
@@ -268,14 +279,18 @@ I'm your Execute AI Agent, here to help you plan and execute your 12-week cycles
 - Plan your next 12-week cycle with vision, goals, and tactics
 - Check on your progress: "How am I doing this week?"
 - Get your daily focus: "What should I work on today?"
-- Analyze your execution patterns and suggest improvements
+- **Explain why your score is what it is** and identify blockers
+- **Compare your performance** across different cycles
+- **Analyze** which tactics drive your goal outcomes
 - Guide you through Weekly Progress Reviews
 
 **Try asking:**
 - "What's my current cycle?"
 - "What should I focus on today?"
-- "How's my weekly score?"
-- "Show me my goals for this cycle"
+- "Why is my score low this week?"
+- "What's blocking my progress?"
+- "Compare my last two cycles"
+- "Which tactics are most effective for my goals?"
 
 How can I help you today?`;
   }
