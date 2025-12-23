@@ -19,6 +19,7 @@
 - [x] Build advanced query tools: `explain_status`, `compare_cycles`, `find_blockers`
 - [x] Create agent action tools (with confirmation): `assign_tactic`, `defer_task`, `mark_complete`
 - [x] Write integration tests for Agent Service (Confirmation/Cancellation flow)
+- [x] Write unit tests for Action Tools (Create/Update/Defer)
 - [ ] Create advanced action tools: `reschedule_tactic`, `update_weight`
 - [x] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
