@@ -1,0 +1,167 @@
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useOrganization } from "@/contexts/organization-context";
+import { useAgent } from "@/contexts/agent-context";
+
+export interface Message {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+  toolCalls?: {
+    name: string;
+    args: Record<string, unknown>;
+    result: { success: boolean };
+  }[];
+}
+
+export interface ToastState {
+  open: boolean;
+  message: string;
+  severity: "success" | "info";
+}
+
+export function useAgentChat() {
+  const { currentOrg } = useOrganization();
+  const { initialMessage, clearInitialMessage } = useAgent();
+  const router = useRouter();
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  const checkForMutatingActions = useCallback((toolCalls: any[]) => {
+    if (!toolCalls || toolCalls.length === 0) return false;
+
+    return toolCalls.some((tool: any) => 
+      (tool.name.startsWith("create_") || 
+       tool.name.startsWith("update_") || 
+       tool.name.startsWith("delete_") ||
+       tool.name === "mark_tactic_complete" ||
+       tool.name === "defer_tactic") && 
+      tool.result?.success
+    );
+  }, []);
+
+  const handleMutatingActions = useCallback((toolCalls: any[]) => {
+    if (checkForMutatingActions(toolCalls)) {
+      router.refresh();
+      setToast({
+        open: true,
+        message: "Dashboard updated successfully",
+        severity: "success",
+      });
+    }
+  }, [checkForMutatingActions, router]);
+
+  const loadGreeting = useCallback(async () => {
+    try {
+      const response = await fetch("/api/agent/chat");
+      const data = (await response.json()) as { message: string };
+
+      if (data.message) {
+        setMessages([
+          {
+            role: "assistant",
+            content: data.message,
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to load greeting:", err);
+    }
+  }, []);
+
+  const sendMessage = async (content: string) => {
+    if (!content.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      role: "user",
+      content,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage.content,
+          conversationId,
+          orgId: currentOrg?.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send message");
+      }
+
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: data.message,
+        timestamp: new Date(),
+        toolCalls: data.toolCalls,
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (data.toolCalls) {
+        handleMutatingActions(data.toolCalls);
+      }
+
+    } catch (err) {
+      console.error("Chat error:", err);
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initialize with greeting or initial message
+  useEffect(() => {
+    if (!isInitialized) {
+      if (initialMessage) {
+        // Auto-send initial message
+        sendMessage(initialMessage);
+        clearInitialMessage();
+      } else {
+        loadGreeting();
+      }
+      setIsInitialized(true);
+    }
+  }, [isInitialized, initialMessage, loadGreeting, clearInitialMessage]); // sendMessage is stable but depends on state, so we rely on the fact that we call it with the initial message directly. 
+  // Actually, sendMessage depends on state (conversationId, currentOrg). 
+  // But inside useEffect, we want to trigger it once.
+  // The issue is sendMessage is async and closes over state.
+  // However, for the *first* message, conversationId is null and currentOrg is likely set.
+  
+  return {
+    messages,
+    input,
+    setInput,
+    isLoading,
+    error,
+    setError,
+    toast,
+    setToast,
+    sendMessage: () => sendMessage(input),
+    // We expose a direct send method for the UI's "Enter" key or button which uses the `input` state
+  };
+}

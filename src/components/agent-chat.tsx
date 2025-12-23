@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import {
   Box,
   Paper,
@@ -21,34 +21,22 @@ import {
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
-
-import { useOrganization } from "@/contexts/organization-context";
-import { useAgent } from "@/contexts/agent-context";
-import { useRouter } from "next/navigation";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  toolCalls?: {
-    name: string;
-    args: Record<string, unknown>;
-    result: { success: boolean };
-  }[];
-}
+import { useAgentChat } from "@/hooks/use-agent-chat";
 
 export default function AgentChat() {
-  const { currentOrg } = useOrganization();
-  const { initialMessage, clearInitialMessage } = useAgent();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ open: boolean; message: string; severity: "success" | "info" } | null>(null);
+  const {
+    messages,
+    input,
+    setInput,
+    isLoading,
+    error,
+    setError,
+    toast,
+    setToast,
+    sendMessage,
+  } = useAgentChat();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   // Auto-scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -58,190 +46,6 @@ export default function AgentChat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
-
-  // Initialize with greeting or initial message
-  useEffect(() => {
-    if (!isInitialized) {
-      if (initialMessage) {
-        // If we have an initial message from context (e.g. "Plan with AI"), send it immediately
-        setInput(initialMessage);
-        // We need to wait a tick for state to update, or just call sendMessage directly?
-        // Better to just set it as input and let user confirm? 
-        // Or auto-send? The requirement implies auto-start.
-        // Let's auto-send.
-        handleAutoSend(initialMessage);
-        clearInitialMessage();
-      } else {
-        loadGreeting();
-      }
-      setIsInitialized(true);
-    }
-  }, [isInitialized, initialMessage]);
-
-  const handleAutoSend = async (text: string) => {
-    const userMessage: Message = {
-      role: "user",
-      content: text,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/agent/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          conversationId,
-          orgId: currentOrg?.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send message");
-      }
-
-      if (data.conversationId) {
-        setConversationId(data.conversationId);
-      }
-
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.message,
-        timestamp: new Date(),
-        toolCalls: data.toolCalls,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Check for mutating tool calls and refresh if needed
-      if (data.toolCalls && data.toolCalls.length > 0) {
-        const hasMutatingAction = data.toolCalls.some((tool: any) => 
-          (tool.name.startsWith("create_") || 
-           tool.name.startsWith("update_") || 
-           tool.name.startsWith("delete_") ||
-           tool.name === "mark_tactic_complete" ||
-           tool.name === "defer_tactic") && 
-          tool.result?.success
-        );
-
-        if (hasMutatingAction) {
-          router.refresh();
-          setToast({
-            open: true,
-            message: "Dashboard updated successfully",
-            severity: "success",
-          });
-        }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadGreeting = async () => {
-    try {
-      const response = await fetch("/api/agent/chat");
-      const data = (await response.json()) as { message: string };
-
-      if (data.message) {
-        setMessages([
-          {
-            role: "assistant",
-            content: data.message,
-            timestamp: new Date(),
-          },
-        ]);
-      }
-    } catch (err) {
-      console.error("Failed to load greeting:", err);
-    }
-  };
-
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
-
-    const userMessage: Message = {
-      role: "user",
-      content: input,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/agent/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: userMessage.content,
-          conversationId,
-          orgId: currentOrg?.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send message");
-      }
-
-      // Update conversation ID if returned (for new conversations)
-      if (data.conversationId) {
-        setConversationId(data.conversationId);
-      }
-
-      // Check for mutating tool calls to refresh the dashboard
-      if (data.toolCalls && data.toolCalls.length > 0) {
-        const hasMutatingAction = data.toolCalls.some((tool: any) => 
-          (tool.name.startsWith("create_") || 
-           tool.name.startsWith("update_") || 
-           tool.name.startsWith("delete_") ||
-           tool.name === "mark_tactic_complete" ||
-           tool.name === "defer_tactic") && 
-          tool.result?.success
-        );
-
-        if (hasMutatingAction) {
-          router.refresh();
-          setToast({
-            open: true,
-            message: "Dashboard updated successfully",
-            severity: "success"
-          });
-        }
-      }
-
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.message,
-        timestamp: new Date(),
-        toolCalls: data.toolCalls,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      console.error("Chat error:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
 
 
