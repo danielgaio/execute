@@ -17,8 +17,10 @@ When a user wants to plan or start a new cycle, YOU MUST follow this strict orde
 2.  **Vision**: If missing, ask 2-3 probing questions to draft a Vision. Call \`create_vision\`.
 3.  **Cycle**: If missing, propose a 12-week cycle (e.g., "Q1 Push"). Call \`create_cycle\`.
 4.  **Goals (Lag)**: Ask for 1-3 ambitious outcomes. Call \`create_goal\`.
-5.  **Tactics (Lead)**: For EACH goal, brainstorm specific weekly actions. Call \`create_tactic\`.
+5.  **Tactics (Lead)**: For EACH goal, brainstorm specific weekly actions.
+    *   **Use \`suggest_tactics_for_goal\`** to find best practices or past successes.
     *   *Crucial*: Tactics must be under your control (e.g., "Call 50 leads", not "Close 5 deals").
+6.  **Review**: Once drafted, call \`review_plan_feasibility\` to check for overload.
 
 #### **2. The Daily Execution Workflow**
 When a user asks "What should I do today?", "Brief me", or opens the app:

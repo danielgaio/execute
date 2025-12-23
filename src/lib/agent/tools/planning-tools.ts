@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
+import { embeddingService } from "../embedding-service";
 
 /**
  * Get the current planning status (Cycle, Vision, Goals)
@@ -75,6 +76,134 @@ export const getPlanningStatusTool: AgentTool = {
   }
 };
 
+/**
+ * Suggest tactics for a specific goal using RAG
+ */
+export const suggestTacticsTool: AgentTool = {
+  name: "suggest_tactics_for_goal",
+  description: "Find similar past tactics or best practices for a given goal description. Use this to help the user brainstorm.",
+  category: "planning",
+  requiresConfirmation: false,
+  parameters: z.object({
+    goalDescription: z.string().describe("Description of the goal to find tactics for"),
+    limit: z.number().optional().describe("Number of suggestions to retrieve (default: 3)")
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      // Search for similar goals/tactics in the vector store
+      const similarItems = await embeddingService.searchEmbeddings(
+        context.supabase,
+        params.goalDescription,
+        context.orgId!,
+        params.limit || 3,
+        0.6 // Threshold
+      );
+
+      // Filter for tactics specifically
+      const relevantTactics = similarItems
+        .filter(item => item.metadata.entity_type === 'tactic')
+        .map(item => ({
+          content: item.content,
+          similarity: item.similarity
+        }));
+
+      // If no direct tactics found, return the similar goals as context
+      const relevantContext = similarItems.map(item => `[${item.metadata.entity_type}] ${item.content}`);
+
+      return {
+        success: true,
+        data: {
+          suggestions: relevantTactics.length > 0 ? relevantTactics : "No direct past tactics found.",
+          context: relevantContext,
+          message: `Found ${relevantTactics.length} relevant past tactics and ${similarItems.length} context items.`
+        }
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
+/**
+ * Review the feasibility of the current plan
+ */
+export const reviewPlanFeasibilityTool: AgentTool = {
+  name: "review_plan_feasibility",
+  description: "Analyze the current cycle's plan for bottlenecks, overload, or missing links.",
+  category: "planning",
+  requiresConfirmation: false,
+  parameters: z.object({
+    cycleId: z.string().optional().describe("ID of the cycle to review (defaults to active)")
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      let cycleId = params.cycleId;
+
+      if (!cycleId) {
+        const { data: activeCycle } = await context.supabase
+          .from("cycles")
+          .select("id")
+          .eq("org_id", context.orgId)
+          .eq("status", "active")
+          .single();
+        if (!activeCycle) throw new Error("No active cycle found.");
+        cycleId = activeCycle.id;
+      }
+
+      // Fetch Goals and Tactics
+      const { data: goals } = await context.supabase
+        .from("goals")
+        .select("id, title, tactics(id, title, weight, recurrence_type)")
+        .eq("cycle_id", cycleId);
+
+      if (!goals || goals.length === 0) {
+        return { success: true, data: { message: "No goals found for this cycle." } };
+      }
+
+      const issues: string[] = [];
+      const warnings: string[] = [];
+      let totalWeeklyWeight = 0;
+
+      goals.forEach((goal: any) => {
+        if (!goal.tactics || goal.tactics.length === 0) {
+          issues.push(`Goal "${goal.title}" has no tactics.`);
+        } else {
+          goal.tactics.forEach((tactic: any) => {
+            if (tactic.weight > 5) warnings.push(`Tactic "${tactic.title}" has a very high weight (${tactic.weight}). Consider breaking it down.`);
+            totalWeeklyWeight += tactic.weight; // Simplified calculation
+          });
+        }
+      });
+
+      // Heuristic: If total weight > 20 (arbitrary "hours" or "points"), flag it
+      if (totalWeeklyWeight > 20) {
+        warnings.push(`Total weekly load is high (${totalWeeklyWeight}). Ensure capacity exists.`);
+      }
+
+      return {
+        success: true,
+        data: {
+          score: issues.length === 0 ? (warnings.length === 0 ? 100 : 80) : 50,
+          issues,
+          warnings,
+          totalWeeklyWeight,
+          message: "Feasibility review complete."
+        }
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+};
+
 export const planningTools = [
-  getPlanningStatusTool
+  getPlanningStatusTool,
+  suggestTacticsTool,
+  reviewPlanFeasibilityTool
 ];
