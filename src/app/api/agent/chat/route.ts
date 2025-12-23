@@ -176,7 +176,29 @@ export async function GET() {
       .eq("id", user.id)
       .single();
 
-    const greeting = agentService.getGreeting(profile?.full_name || undefined);
+    // Get user's organization to build context
+    const { data: membership } = await supabase
+      .from("org_members")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .single();
+
+    let greeting: string;
+
+    if (membership?.org_id) {
+      greeting = await agentService.getProactiveGreeting(
+        {
+          userId: user.id,
+          orgId: membership.orgId,
+          supabase,
+        },
+        profile?.full_name || undefined
+      );
+    } else {
+      // Fallback if no org (shouldn't happen in normal flow)
+      greeting = agentService.getGreeting(profile?.full_name || undefined);
+    }
 
     return NextResponse.json({
       message: greeting,

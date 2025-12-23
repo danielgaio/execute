@@ -219,4 +219,39 @@ describe("AgentService", () => {
 
     expect(result.message).toBe("Okay, I cancelled it.");
   });
+
+  describe("getProactiveGreeting", () => {
+    it("should suggest creating a cycle if none exists", async () => {
+      (contextBuilder.contextBuilder.buildContext as any).mockResolvedValue({
+        activeCycle: null,
+        pendingTasksCount: 0,
+        overdueTasksCount: 0,
+        todayTasksCount: 0
+      });
+
+      const greeting = await agentService.getProactiveGreeting(
+        { userId: "u1", orgId: "o1", supabase: mockSupabase },
+        "Daniel"
+      );
+
+      expect(greeting).toContain("Hi Daniel!");
+      expect(greeting).toContain("don't have an active 12-week cycle");
+    });
+
+    it("should warn about overdue tasks", async () => {
+      (contextBuilder.contextBuilder.buildContext as any).mockResolvedValue({
+        activeCycle: { id: "c1" },
+        pendingTasksCount: 5,
+        overdueTasksCount: 3,
+        todayTasksCount: 0
+      });
+
+      const greeting = await agentService.getProactiveGreeting(
+        { userId: "u1", orgId: "o1", supabase: mockSupabase },
+        "Daniel"
+      );
+
+      expect(greeting).toContain("You have 3 overdue tasks");
+    });
+  });
 });

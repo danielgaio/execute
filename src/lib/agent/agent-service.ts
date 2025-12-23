@@ -352,6 +352,51 @@ ${relevantDocs
   }
 
   /**
+   * Get a context-aware proactive greeting
+   */
+  async getProactiveGreeting(
+    context: ToolContext,
+    userName?: string
+  ): Promise<string> {
+    const greeting = userName ? `Hi ${userName}! 👋` : "Hi there! 👋";
+    let specificPrompt = "";
+
+    try {
+      // Build context to understand the user's state
+      const data = await contextBuilder.buildContext(
+        context.supabase,
+        context.orgId!
+      );
+
+      if (!data.activeCycle) {
+        specificPrompt = "\n\n**I noticed you don't have an active 12-week cycle.**\nWould you like to create one now? I can help you define your vision and goals.";
+      } else if (data.overdueTasksCount > 0) {
+        specificPrompt = `\n\n**You have ${data.overdueTasksCount} overdue tasks.**\nShall we review them and get you back on track?`;
+      } else if (data.todayTasksCount > 0) {
+        specificPrompt = `\n\n**You have ${data.todayTasksCount} tasks due today.**\nReady to focus on execution?`;
+      } else if (data.weeklyScore !== undefined && data.weeklyScore < 60) {
+        specificPrompt = `\n\n**Your weekly score is ${data.weeklyScore}%.**\nLet's analyze what's blocking your progress.`;
+      } else {
+        specificPrompt = "\n\nHow can I help you execute your plan today?";
+      }
+    } catch (error) {
+      console.error("Failed to build context for greeting:", error);
+      specificPrompt = "\n\nHow can I help you today?";
+    }
+
+    return `${greeting}
+
+I'm your Execute AI Agent.${specificPrompt}
+
+**I can also help you:**
+- Check on your progress: "How am I doing this week?"
+- Get your daily focus: "What should I work on today?"
+- **Explain why your score is what it is** and identify blockers
+- **Compare your performance** across different cycles
+- Guide you through Weekly Progress Reviews`;
+  }
+
+  /**
    * Get a simple greeting message for new users
    */
   getGreeting(userName?: string): string {
