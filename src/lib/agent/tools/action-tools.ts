@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { embeddingService } from "../embedding-service";
+import { logAgentAction, captureEntityState } from "../audit-service";
 import { generateTacticInstancesForWeek, getWeekStart } from "@/utils/planning";
 
 /**
@@ -45,6 +46,21 @@ export const createCycleTool: AgentTool = {
 
       // Index for RAG
       await embeddingService.indexCycle(context.supabase, cycle, context.orgId!);
+
+      // Log agent action to audit trail
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "create_cycle",
+        action: "create",
+        entityType: "cycle",
+        entityId: cycle.id,
+        afterState: cycle,
+        metadata: {
+          confirmed: true,
+          tool_category: "planning",
+        },
+      });
 
       return {
         success: true,
@@ -104,6 +120,21 @@ export const createGoalTool: AgentTool = {
       // Index for RAG
       await embeddingService.indexGoal(context.supabase, goal, context.orgId!);
 
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "create_goal",
+        action: "create",
+        entityType: "goal",
+        entityId: goal.id,
+        afterState: goal,
+        metadata: {
+          confirmed: true,
+          cycle_id: params.cycle_id,
+        },
+      });
+
       return {
         success: true,
         data: {
@@ -159,6 +190,21 @@ export const createTacticTool: AgentTool = {
       // Index for RAG
       await embeddingService.indexTactic(context.supabase, tactic, context.orgId!);
 
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "create_tactic",
+        action: "create",
+        entityType: "tactic",
+        entityId: tactic.id,
+        afterState: tactic,
+        metadata: {
+          confirmed: true,
+          goal_id: params.goal_id,
+        },
+      });
+
       // Generate instances for current week
       try {
         await generateTacticInstancesForWeek(
@@ -207,6 +253,13 @@ export const markTacticCompleteTool: AgentTool = {
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
+      // Capture state before modification
+      const beforeState = await captureEntityState(
+        context.supabase,
+        "tactic_instances",
+        params.instance_id
+      );
+
       const { error } = await context.supabase
         .from("tactic_instances")
         .update({
@@ -234,6 +287,22 @@ export const markTacticCompleteTool: AgentTool = {
         )
         .eq("id", params.instance_id)
         .single();
+
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "mark_tactic_complete",
+        action: "update",
+        entityType: "tactic_instance",
+        entityId: params.instance_id,
+        beforeState,
+        afterState: instance,
+        metadata: {
+          confirmed: true,
+          completion_notes: params.notes,
+        },
+      });
 
       return {
         success: true,
@@ -269,6 +338,13 @@ export const deferTacticTool: AgentTool = {
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
+      // Capture state before modification
+      const beforeState = await captureEntityState(
+        context.supabase,
+        "tactic_instances",
+        params.instance_id
+      );
+
       const { error } = await context.supabase
         .from("tactic_instances")
         .update({
@@ -280,6 +356,29 @@ export const deferTacticTool: AgentTool = {
         .eq("org_id", context.orgId);
 
       if (error) throw error;
+
+      // Fetch updated instance
+      const afterState = await captureEntityState(
+        context.supabase,
+        "tactic_instances",
+        params.instance_id
+      );
+
+      // Log agent action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "defer_tactic",
+        action: "update",
+        entityType: "tactic_instance",
+        entityId: params.instance_id,
+        beforeState,
+        afterState,
+        metadata: {
+          confirmed: true,
+          defer_reason: params.reason,
+        },
+      });
 
       return {
         success: true,

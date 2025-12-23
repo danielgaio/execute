@@ -5,6 +5,7 @@
 
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
+import { getEntityHistory, getRecentAuditActivity } from "../audit-service";
 
 /**
  * List all active cycles for the user's organization
@@ -408,6 +409,117 @@ export const getWeeklyScoreTool: AgentTool = {
   },
 };
 
+/**
+ * Get change history for an entity
+ */
+export const getEntityHistoryTool: AgentTool = {
+  name: "get_entity_history",
+  description:
+    "Get complete change history for an entity (cycle, goal, tactic, etc.). Shows who changed what and when.",
+  category: "query",
+  requiresConfirmation: false,
+  parameters: z.object({
+    entity_type: z
+      .enum([
+        "cycle",
+        "goal",
+        "tactic",
+        "tactic_instance",
+        "vision",
+        "weekly_plan",
+      ])
+      .describe("Type of entity to get history for"),
+    entity_id: z.string().describe("ID of the entity"),
+    limit: z
+      .number()
+      .optional()
+      .describe("Maximum number of history entries to return (default: 50)"),
+  }),
+  handler: async (
+    params: { entity_type: string; entity_id: string; limit?: number },
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    try {
+      const history = await getEntityHistory(
+        context.supabase,
+        params.entity_type,
+        params.entity_id,
+        params.limit || 50
+      );
+
+      return {
+        success: true,
+        data: {
+          entity_type: params.entity_type,
+          entity_id: params.entity_id,
+          history,
+          count: history.length,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to get entity history",
+      };
+    }
+  },
+};
+
+/**
+ * Get recent activity across the organization
+ */
+export const getRecentActivityTool: AgentTool = {
+  name: "get_recent_activity",
+  description:
+    "Get recent activity across the organization. Useful for understanding what's been happening, who's making changes, and what agent actions have been executed.",
+  category: "query",
+  requiresConfirmation: false,
+  parameters: z.object({
+    limit: z
+      .number()
+      .optional()
+      .describe("Maximum number of activity entries to return (default: 50)"),
+  }),
+  handler: async (
+    params: { limit?: number },
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    try {
+      if (!context.orgId) {
+        return {
+          success: false,
+          error: "No organization context available",
+        };
+      }
+
+      const activity = await getRecentAuditActivity(
+        context.supabase,
+        context.orgId,
+        params.limit || 50
+      );
+
+      return {
+        success: true,
+        data: {
+          activity,
+          count: activity.length,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to get recent activity",
+      };
+    }
+  },
+};
+
 // Export all query tools
 export const queryTools = [
   listCyclesTool,
@@ -415,4 +527,6 @@ export const queryTools = [
   listTacticsTool,
   getTodayFocusTool,
   getWeeklyScoreTool,
+  getEntityHistoryTool,
+  getRecentActivityTool,
 ];
