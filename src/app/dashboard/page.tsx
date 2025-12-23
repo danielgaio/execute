@@ -6,6 +6,7 @@ import { toggleInstanceStatus } from './actions'
 import { getWeekStart } from '@/utils/planning'
 import { cookies } from 'next/headers'
 import EmptyCycleState from '@/components/dashboard/empty-cycle-state'
+import DailyBriefingButton from '@/components/dashboard/daily-briefing-button'
 
 interface TacticInstance {
   id: string
@@ -136,9 +137,12 @@ export default async function DashboardPage() {
         </Box>
         <Box sx={{ flex: 1, minWidth: 300 }}>
           <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240, overflow: 'auto' }}>
-            <Typography variant="h6" color="primary" gutterBottom>
-              Today&apos;s Focus
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6" color="primary">
+                Today&apos;s Focus
+              </Typography>
+              <DailyBriefingButton />
+            </Box>
             {todaysInstances && todaysInstances.length > 0 ? (
               <Box>
                 {todaysInstances.map((instance: TacticInstance) => (

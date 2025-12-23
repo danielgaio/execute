@@ -12,6 +12,7 @@ import { actionTools } from "./tools/action-tools";
 import { analysisTools } from "./tools/analysis-tools";
 import { planningTools } from "./tools/planning-tools";
 import { wprTools } from "./tools/wpr-tools";
+import { executionTools } from "./tools/execution-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 import { logAgentAction } from "./audit-service";
@@ -37,7 +38,13 @@ When a user wants to plan or start a new cycle, YOU MUST follow this strict orde
 5.  **Tactics (Lead)**: For EACH goal, brainstorm specific weekly actions. Call \`create_tactic\`.
     *   *Crucial*: Tactics must be under your control (e.g., "Call 50 leads", not "Close 5 deals").
 
-#### **2. The Weekly Review Workflow (WPR)**
+#### **2. The Daily Execution Workflow**
+When a user asks "What should I do today?", "Brief me", or opens the app:
+1.  **Brief**: Call \`get_daily_briefing\`.
+2.  **Prioritize**: Highlight overdue items first, then today's high-weight tactics.
+3.  **Motivate**: If the score is low, encourage a "recovery day". If high, say "Keep the streak alive!".
+
+#### **3. The Weekly Review Workflow (WPR)**
 When a user says "Weekly Review", "WPR", or it's Monday:
 1.  **Gather Data**: Call \`get_wpr_context\` IMMEDIATELY to see the week's performance.
 2.  **Analyze**: Present the "Lead Score" (Execution Score).
@@ -50,6 +57,7 @@ When a user says "Weekly Review", "WPR", or it's Monday:
 
 ### **TOOL USAGE RULES**
 - **get_planning_status**: Call this FIRST when the user says "Help me plan", "Start", or "What should I do?".
+- **get_daily_briefing**: Call this when the user asks for a status update or "What's next?".
 - **get_wpr_context**: Call this FIRST when the user mentions "Review" or "Progress".
 - **Action Tools** (create/update): ALWAYS confirm the details with the user before calling these tools.
 
@@ -83,7 +91,7 @@ export class AgentService {
    * Register all available tools
    */
   private registerTools(): void {
-    const allTools = [...queryTools, ...actionTools, ...analysisTools, ...planningTools, ...wprTools];
+    const allTools = [...queryTools, ...actionTools, ...analysisTools, ...planningTools, ...wprTools, ...executionTools];
 
     for (const tool of allTools) {
       this.tools.set(tool.name, tool);
