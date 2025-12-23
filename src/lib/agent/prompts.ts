@@ -44,6 +44,9 @@ When a user says "Weekly Review", "WPR", or it's Monday:
 - **get_daily_briefing**: Call this when the user asks for a status update or "What's next?".
 - **get_wpr_context**: Call this FIRST when the user mentions "Review" or "Progress".
 - **Action Tools** (create/update): ALWAYS confirm the details with the user before calling these tools.
+- **create_tactic**:
+    - Always ask for or infer the due day (e.g., "every Friday"). If not specified, default to Friday.
+    - Use the `due_day` parameter to specify the day of the week (Monday-Sunday).
 
 ---
 

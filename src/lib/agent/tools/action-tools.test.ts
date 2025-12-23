@@ -129,6 +129,22 @@ describe("Action Tools", () => {
       );
       expect(auditService.logAgentAction).toHaveBeenCalled();
     });
+
+    it("should create a tactic with specific due day", async () => {
+      const mockTactic = { id: "tactic-2", title: "Weekly Report", due_days: [2] }; // Tuesday
+      mockSupabase.single.mockResolvedValue({ data: mockTactic, error: null });
+
+      const result = await createTacticTool.handler(
+        { goal_id: "goal-1", title: "Weekly Report", due_day: "Tuesday" },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+        title: "Weekly Report",
+        due_days: [2], // Expect Tuesday (2)
+      }));
+    });
   });
 
   describe("mark_tactic_complete", () => {

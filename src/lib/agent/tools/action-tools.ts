@@ -166,9 +166,18 @@ export const createTacticTool: AgentTool = {
     description: z.string().optional().describe("Description of the tactic"),
     weight: z.number().optional().describe("Weight of the tactic (0.1 to 1.0, default: 1.0)"),
     recurrence: z.enum(["weekly", "daily", "one_off"]).optional().describe("Recurrence pattern (default: weekly)"),
+    due_day: z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]).optional().describe("Day of the week the tactic is due (for weekly recurrence). Default: Friday"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
+      // Map day name to index (1=Monday, 7=Sunday)
+      const dayMap: Record<string, number> = {
+        "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, 
+        "Friday": 5, "Saturday": 6, "Sunday": 7
+      };
+      
+      const dueDays = params.due_day ? [dayMap[params.due_day]] : [5]; // Default to Friday
+
       const { data: tactic, error } = await context.supabase
         .from("tactics")
         .insert({
@@ -178,7 +187,7 @@ export const createTacticTool: AgentTool = {
           description: params.description,
           weight: params.weight || 1.0,
           recurrence: params.recurrence || "weekly",
-          due_days: [5], // Default to Friday
+          due_days: dueDays,
           assignee_user_id: context.userId,
           status: "active",
         })
