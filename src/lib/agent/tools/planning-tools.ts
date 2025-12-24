@@ -8,7 +8,8 @@ import { generateWeeklyPlan } from "../../domain/planning";
  */
 export const getPlanningStatusTool: AgentTool = {
   name: "get_planning_status",
-  description: "Check the current status of the 12-week plan (Cycle, Vision, Goals). Use this to determine what needs to be created next.",
+  description:
+    "Check the current status of the 12-week plan (Cycle, Vision, Goals). Use this to determine what needs to be created next.",
   category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({}),
@@ -44,37 +45,49 @@ export const getPlanningStatusTool: AgentTool = {
         hasActiveCycle: !!activeCycle,
         hasVision: !!vision,
         goalCount: goals.length,
-        activeCycle: activeCycle ? {
-          title: activeCycle.title,
-          startDate: activeCycle.start_date,
-          endDate: activeCycle.end_date,
-          daysRemaining: activeCycle ? Math.ceil((new Date(activeCycle.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0
-        } : null,
-        visionPreview: vision ? vision.content_md.substring(0, 100) + "..." : null,
-        goals: goals.map(g => ({ title: g.title, status: g.status }))
+        activeCycle: activeCycle
+          ? {
+              title: activeCycle.title,
+              startDate: activeCycle.start_date,
+              endDate: activeCycle.end_date,
+              daysRemaining: activeCycle
+                ? Math.ceil(
+                    (new Date(activeCycle.end_date).getTime() -
+                      new Date().getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  )
+                : 0,
+            }
+          : null,
+        visionPreview: vision
+          ? vision.content_md.substring(0, 100) + "..."
+          : null,
+        goals: goals.map((g) => ({ title: g.title, status: g.status })),
       };
 
       let nextSteps = [];
       if (!vision) nextSteps.push("Create a Vision statement.");
       if (!activeCycle) nextSteps.push("Create a new 12-week Cycle.");
-      if (activeCycle && goals.length === 0) nextSteps.push("Create Goals for the active Cycle.");
-      if (activeCycle && goals.length > 0) nextSteps.push("Review Tactics for existing Goals.");
+      if (activeCycle && goals.length === 0)
+        nextSteps.push("Create Goals for the active Cycle.");
+      if (activeCycle && goals.length > 0)
+        nextSteps.push("Review Tactics for existing Goals.");
 
       return {
         success: true,
         data: {
           status,
           nextSteps,
-          message: "Planning status retrieved."
-        }
+          message: "Planning status retrieved.",
+        },
       };
     } catch (error: any) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
-  }
+  },
 };
 
 /**
@@ -82,50 +95,61 @@ export const getPlanningStatusTool: AgentTool = {
  */
 export const suggestTacticsTool: AgentTool = {
   name: "suggest_tactics_for_goal",
-  description: "Find similar past tactics or best practices for a given goal description. Use this to help the user brainstorm.",
-  category: "planning",
+  description:
+    "Find similar past tactics or best practices for a given goal description. Use this to help the user brainstorm.",
+  category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
-    goalDescription: z.string().describe("Description of the goal to find tactics for"),
-    limit: z.number().optional().describe("Number of suggestions to retrieve (default: 3)")
+    goalDescription: z
+      .string()
+      .describe("Description of the goal to find tactics for"),
+    limit: z
+      .number()
+      .optional()
+      .describe("Number of suggestions to retrieve (default: 3)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
       // Search for similar goals/tactics in the vector store
       const similarItems = await embeddingService.searchEmbeddings(
         context.supabase,
-        params.goalDescription,
+        params.goalDescription as string,
         context.orgId!,
-        params.limit || 3,
+        (params.limit as number) || 3,
         0.6 // Threshold
       );
 
       // Filter for tactics specifically
       const relevantTactics = similarItems
-        .filter(item => item.metadata.entity_type === 'tactic')
-        .map(item => ({
+        .filter((item) => item.metadata.entity_type === "tactic")
+        .map((item) => ({
           content: item.content,
-          similarity: item.similarity
+          similarity: item.similarity,
         }));
 
       // If no direct tactics found, return the similar goals as context
-      const relevantContext = similarItems.map(item => `[${item.metadata.entity_type}] ${item.content}`);
+      const relevantContext = similarItems.map(
+        (item) => `[${item.metadata.entity_type}] ${item.content}`
+      );
 
       return {
         success: true,
         data: {
-          suggestions: relevantTactics.length > 0 ? relevantTactics : "No direct past tactics found.",
+          suggestions:
+            relevantTactics.length > 0
+              ? relevantTactics
+              : "No direct past tactics found.",
           context: relevantContext,
-          message: `Found ${relevantTactics.length} relevant past tactics and ${similarItems.length} context items.`
-        }
+          message: `Found ${relevantTactics.length} relevant past tactics and ${similarItems.length} context items.`,
+        },
       };
     } catch (error: any) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
-  }
+  },
 };
 
 /**
@@ -133,11 +157,15 @@ export const suggestTacticsTool: AgentTool = {
  */
 export const reviewPlanFeasibilityTool: AgentTool = {
   name: "review_plan_feasibility",
-  description: "Analyze the current cycle's plan for bottlenecks, overload, or missing links.",
-  category: "planning",
+  description:
+    "Analyze the current cycle's plan for bottlenecks, overload, or missing links.",
+  category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
-    cycleId: z.string().optional().describe("ID of the cycle to review (defaults to active)")
+    cycleId: z
+      .string()
+      .optional()
+      .describe("ID of the cycle to review (defaults to active)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -161,7 +189,10 @@ export const reviewPlanFeasibilityTool: AgentTool = {
         .eq("cycle_id", cycleId);
 
       if (!goals || goals.length === 0) {
-        return { success: true, data: { message: "No goals found for this cycle." } };
+        return {
+          success: true,
+          data: { message: "No goals found for this cycle." },
+        };
       }
 
       const issues: string[] = [];
@@ -173,7 +204,10 @@ export const reviewPlanFeasibilityTool: AgentTool = {
           issues.push(`Goal "${goal.title}" has no tactics.`);
         } else {
           goal.tactics.forEach((tactic: any) => {
-            if (tactic.weight > 5) warnings.push(`Tactic "${tactic.title}" has a very high weight (${tactic.weight}). Consider breaking it down.`);
+            if (tactic.weight > 5)
+              warnings.push(
+                `Tactic "${tactic.title}" has a very high weight (${tactic.weight}). Consider breaking it down.`
+              );
             totalWeeklyWeight += tactic.weight; // Simplified calculation
           });
         }
@@ -181,7 +215,9 @@ export const reviewPlanFeasibilityTool: AgentTool = {
 
       // Heuristic: If total weight > 20 (arbitrary "hours" or "points"), flag it
       if (totalWeeklyWeight > 20) {
-        warnings.push(`Total weekly load is high (${totalWeeklyWeight}). Ensure capacity exists.`);
+        warnings.push(
+          `Total weekly load is high (${totalWeeklyWeight}). Ensure capacity exists.`
+        );
       }
 
       return {
@@ -191,32 +227,38 @@ export const reviewPlanFeasibilityTool: AgentTool = {
           issues,
           warnings,
           totalWeeklyWeight,
-          message: "Feasibility review complete."
-        }
+          message: "Feasibility review complete.",
+        },
       };
     } catch (error: any) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
-  }
+  },
 };
 
 export const generateWeeklyPlanTool: AgentTool = {
   name: "generate_weekly_plan",
-  description: "Generate tactic instances for the current week based on active tactics. This should be run at the start of the week or when tactics are changed.",
-  category: "planning",
+  description:
+    "Generate tactic instances for the current week based on active tactics. This should be run at the start of the week or when tactics are changed.",
+  category: "action",
   requiresConfirmation: true,
   parameters: z.object({
-    weekStart: z.string().optional().describe("The start date of the week (YYYY-MM-DD). Defaults to current week start.")
+    weekStart: z
+      .string()
+      .optional()
+      .describe(
+        "The start date of the week (YYYY-MM-DD). Defaults to current week start."
+      ),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
       // Parse weekStart or use current week start (Monday)
       let weekStartDate: Date;
       if (params.weekStart) {
-        weekStartDate = new Date(params.weekStart);
+        weekStartDate = new Date(params.weekStart as string);
         if (isNaN(weekStartDate.getTime())) {
           throw new Error("Invalid date format for weekStart. Use YYYY-MM-DD.");
         }
@@ -231,29 +273,29 @@ export const generateWeeklyPlanTool: AgentTool = {
 
       const result = await generateWeeklyPlan(
         context.supabase,
-        context.orgId,
+        context.orgId!,
         weekStartDate
       );
-      
+
       return {
         success: true,
         data: {
           message: `Weekly plan generated. Created ${result.generated} instances.`,
-          details: result
-        }
+          details: result,
+        },
       };
     } catch (error: any) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
       };
     }
-  }
+  },
 };
 
 export const planningTools = [
   getPlanningStatusTool,
   suggestTacticsTool,
   reviewPlanFeasibilityTool,
-  generateWeeklyPlanTool
+  generateWeeklyPlanTool,
 ];

@@ -20,7 +20,10 @@ export const searchKnowledgeBaseTool: AgentTool = {
   parameters: z.object({
     query: z.string().describe("The natural language search query"),
     limit: z.number().optional().describe("Max results (default: 5)"),
-    threshold: z.number().optional().describe("Similarity threshold 0-1 (default: 0.5)"),
+    threshold: z
+      .number()
+      .optional()
+      .describe("Similarity threshold 0-1 (default: 0.5)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -28,29 +31,29 @@ export const searchKnowledgeBaseTool: AgentTool = {
 
       const results = await embeddingService.searchEmbeddings(
         context.supabase,
-        params.query,
+        params.query as string,
         context.orgId,
-        params.limit || 5,
-        params.threshold || 0.5
+        (params.limit as number) || 5,
+        (params.threshold as number) || 0.5
       );
 
       return {
         success: true,
         data: {
-          results: results.map(r => ({
+          results: results.map((r) => ({
             content: r.content,
             type: r.metadata.entity_type,
             title: r.metadata.title,
-            similarity: r.similarity
+            similarity: r.similarity,
           })),
           count: results.length,
-          message: `Found ${results.length} relevant items.`
-        }
+          message: `Found ${results.length} relevant items.`,
+        },
       };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
-  }
+  },
 };
 
 /**

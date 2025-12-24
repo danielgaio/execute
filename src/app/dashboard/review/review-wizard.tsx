@@ -52,7 +52,9 @@ export default function ReviewWizard({
 }: ReviewWizardProps) {
   const [activeStep, setActiveStep] = useState(0);
   const [notes, setNotes] = useState("");
-  const [pendingAction, setPendingAction] = useState<"defer" | "skip" | "none">("defer");
+  const [pendingAction, setPendingAction] = useState<"defer" | "skip" | "none">(
+    "defer"
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleNext = () => {
@@ -70,7 +72,9 @@ export default function ReviewWizard({
   const handleSubmit = () => {
     startTransition(async () => {
       // Calculate lag status summary
-      const onTrack = goals.filter(g => g.status === 'on_track' || g.status === 'completed').length;
+      const onTrack = goals.filter(
+        (g) => g.status === "on_track" || g.status === "completed"
+      ).length;
       const lagStatus = `${onTrack}/${goals.length} Goals On Track`;
 
       await submitWeeklyReview(orgId, cycleId, weekStart, {
@@ -78,7 +82,7 @@ export default function ReviewWizard({
         lagStatus,
         notes,
         pendingAction,
-        pendingInstanceIds: pendingInstances.map(i => i.id)
+        pendingInstanceIds: pendingInstances.map((i) => i.id),
       });
     });
   };
@@ -99,9 +103,9 @@ export default function ReviewWizard({
             <Typography variant="h5" gutterBottom>
               Week of {weekStart}
             </Typography>
-            
+
             <Grid container spacing={3} sx={{ mt: 2 }}>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography color="text.secondary" gutterBottom>
@@ -113,20 +117,28 @@ export default function ReviewWizard({
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid size={{ xs: 12, md: 6 }}>
                 <Card variant="outlined">
                   <CardContent>
                     <Typography color="text.secondary" gutterBottom>
                       GOAL STATUS
                     </Typography>
                     <Stack spacing={1}>
-                      {goals.map(goal => (
-                        <Box key={goal.id} sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      {goals.map((goal) => (
+                        <Box
+                          key={goal.id}
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                          }}
+                        >
                           <Typography variant="body2">{goal.title}</Typography>
-                          <Chip 
-                            label={goal.status?.replace('_', ' ')} 
-                            size="small" 
-                            color={goal.status === 'on_track' ? 'success' : 'warning'} 
+                          <Chip
+                            label={goal.status?.replace("_", " ")}
+                            size="small"
+                            color={
+                              goal.status === "on_track" ? "success" : "warning"
+                            }
                           />
                         </Box>
                       ))}
@@ -163,17 +175,27 @@ export default function ReviewWizard({
               Clean Up Pending Items
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-              You have {pendingInstances.length} pending items from this week. What should we do with them?
+              You have {pendingInstances.length} pending items from this week.
+              What should we do with them?
             </Typography>
 
             {pendingInstances.length > 0 ? (
               <>
-                <List dense sx={{ bgcolor: 'background.paper', mb: 2, border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <List
+                  dense
+                  sx={{
+                    bgcolor: "background.paper",
+                    mb: 2,
+                    border: 1,
+                    borderColor: "divider",
+                    borderRadius: 1,
+                  }}
+                >
                   {pendingInstances.map((instance) => (
                     <ListItem key={instance.id}>
-                      <ListItemText 
-                        primary={instance.tactics?.title} 
-                        secondary={`Due: ${instance.due_date}`} 
+                      <ListItemText
+                        primary={instance.tactics?.title}
+                        secondary={`Due: ${instance.due_date}`}
                       />
                     </ListItem>
                   ))}
@@ -185,14 +207,28 @@ export default function ReviewWizard({
                     value={pendingAction}
                     onChange={(e) => setPendingAction(e.target.value as any)}
                   >
-                    <FormControlLabel value="defer" control={<Radio />} label="Defer to Next Week (Recommended)" />
-                    <FormControlLabel value="skip" control={<Radio />} label="Mark as Skipped (Will lower score)" />
-                    <FormControlLabel value="none" control={<Radio />} label="Do Nothing (Leave as Pending)" />
+                    <FormControlLabel
+                      value="defer"
+                      control={<Radio />}
+                      label="Defer to Next Week (Recommended)"
+                    />
+                    <FormControlLabel
+                      value="skip"
+                      control={<Radio />}
+                      label="Mark as Skipped (Will lower score)"
+                    />
+                    <FormControlLabel
+                      value="none"
+                      control={<Radio />}
+                      label="Do Nothing (Leave as Pending)"
+                    />
                   </RadioGroup>
                 </FormControl>
               </>
             ) : (
-              <Typography color="success.main">All clear! No pending items.</Typography>
+              <Typography color="success.main">
+                All clear! No pending items.
+              </Typography>
             )}
           </Box>
         )}
@@ -203,22 +239,28 @@ export default function ReviewWizard({
               Plan Next Week
             </Typography>
             <Typography variant="body2" color="text.secondary" paragraph>
-              Here is a preview of your plan for next week based on your recurring tactics.
+              Here is a preview of your plan for next week based on your
+              recurring tactics.
             </Typography>
 
             <List dense>
               {nextWeekInstances.length > 0 ? (
                 nextWeekInstances.map((instance, index) => (
                   <ListItem key={index}>
-                    <ListItemText 
-                      primary={instance.title} 
-                      secondary={instance.recurrence === 'weekly' ? 'Weekly Recurring' : 'One-off'} 
+                    <ListItemText
+                      primary={instance.title}
+                      secondary={
+                        instance.recurrence === "weekly"
+                          ? "Weekly Recurring"
+                          : "One-off"
+                      }
                     />
                   </ListItem>
                 ))
               ) : (
-                <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                  No items scheduled yet. They will be generated when you commit.
+                <Typography variant="body2" sx={{ fontStyle: "italic" }}>
+                  No items scheduled yet. They will be generated when you
+                  commit.
                 </Typography>
               )}
             </List>
@@ -227,18 +269,15 @@ export default function ReviewWizard({
       </Paper>
 
       <Box sx={{ display: "flex", justifyContent: "space-between", mt: 2 }}>
-        <Button
-          disabled={activeStep === 0}
-          onClick={handleBack}
-        >
+        <Button disabled={activeStep === 0} onClick={handleBack}>
           Back
         </Button>
-        <Button
-          variant="contained"
-          onClick={handleNext}
-          disabled={isPending}
-        >
-          {activeStep === steps.length - 1 ? (isPending ? "Committing..." : "Commit & Start Next Week") : "Next"}
+        <Button variant="contained" onClick={handleNext} disabled={isPending}>
+          {activeStep === steps.length - 1
+            ? isPending
+              ? "Committing..."
+              : "Commit & Start Next Week"
+            : "Next"}
         </Button>
       </Box>
     </Box>

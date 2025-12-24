@@ -3,7 +3,8 @@
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { generateTacticInstancesForWeek, getWeekStart } from "@/utils/planning";
+import { generateInstancesForTacticId } from "@/lib/domain/planning";
+import { getWeekStart } from "@/utils/planning";
 import { embeddingService } from "@/lib/agent/embedding-service";
 
 export async function createTactic(formData: FormData) {
@@ -71,12 +72,7 @@ export async function createTactic(formData: FormData) {
 
   // Generate instances for current week
   try {
-    await generateTacticInstancesForWeek(
-      supabase,
-      tactic.id,
-      getWeekStart(),
-      membership.org_id
-    );
+    await generateInstancesForTacticId(supabase, tactic.id, getWeekStart());
   } catch (e) {
     console.error("Error generating instances:", e);
     // Don't fail the request if generation fails, just log it
@@ -84,4 +80,66 @@ export async function createTactic(formData: FormData) {
 
   revalidatePath("/dashboard/goals");
   redirect("/dashboard/goals");
+}
+
+export async function updateTactic(tacticId: string, formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const weight = parseFloat(formData.get("weight") as string);
+
+  if (!title) {
+    return { error: "Title is required" };
+  }
+
+  // Get user's org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) {
+    return { error: "No organization found" };
+  }
+
+  const updates: any = {
+    title,
+    description,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (!isNaN(weight)) {
+    updates.weight = weight;
+  }
+
+  const { data: tactic, error } = await supabase
+    .from("tactics")
+    .update(updates)
+    .eq("id", tacticId)
+    .eq("org_id", membership.org_id)
+    .select()
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  // Re-index for RAG
+  try {
+    await embeddingService.indexTactic(supabase, tactic, membership.org_id);
+  } catch (err) {
+    console.error("Failed to index tactic:", err);
+  }
+
+  revalidatePath("/dashboard/tactics");
+  redirect("/dashboard/tactics");
 }

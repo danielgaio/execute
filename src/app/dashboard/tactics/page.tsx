@@ -10,8 +10,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
-import { Add as AddIcon } from "@mui/icons-material";
+import { Add as AddIcon, Edit as EditIcon } from "@mui/icons-material";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 
@@ -190,6 +192,7 @@ export default async function TacticsPage() {
                 <TableCell align="center">Recurrence</TableCell>
                 <TableCell align="center">Due Days</TableCell>
                 <TableCell align="center">Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -239,6 +242,15 @@ export default async function TacticsPage() {
                         size="small"
                         color={t.status === "active" ? "success" : "default"}
                       />
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Edit Tactic">
+                        <Link href={`/dashboard/tactics/${t.id}/edit`} passHref>
+                          <IconButton size="small">
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Link>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );

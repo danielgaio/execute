@@ -61,8 +61,6 @@ export default function AgentChat({ onClose }: AgentChatProps) {
     scrollToBottom();
   }, [messages]);
 
-
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -72,15 +70,28 @@ export default function AgentChat({ onClose }: AgentChatProps) {
 
   const renderConfirmationArgs = (request: typeof confirmationRequest) => {
     if (!request) return null;
-    
-    if (request.name === 'create_vision' && typeof request.args.content === 'string') {
+
+    if (
+      request.name === "create_vision" &&
+      typeof request.args.content === "string"
+    ) {
       return (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
             Vision Content Preview:
           </Typography>
-          <Paper variant="outlined" sx={{ p: 1, maxHeight: 200, overflowY: 'auto', bgcolor: 'grey.50' }}>
-            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+          <Paper
+            variant="outlined"
+            sx={{ p: 1, maxHeight: 200, overflowY: "auto", bgcolor: "grey.50" }}
+          >
+            <Typography
+              variant="body2"
+              sx={{
+                whiteSpace: "pre-wrap",
+                fontFamily: "monospace",
+                fontSize: "0.8rem",
+              }}
+            >
               {request.args.content}
             </Typography>
           </Paper>
@@ -88,26 +99,33 @@ export default function AgentChat({ onClose }: AgentChatProps) {
       );
     }
 
-    if (request.name === 'create_goal') {
+    if (request.name === "create_goal") {
       return (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
             Goal Preview:
           </Typography>
-          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: "grey.50" }}>
             <Typography variant="subtitle2" gutterBottom>
               {request.args.title as string}
             </Typography>
-            {request.args.description && (
+            {(request.args.description as string) && (
               <Typography variant="body2" color="text.secondary" paragraph>
                 {request.args.description as string}
               </Typography>
             )}
             <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
               <Chip label={`Target: ${request.args.target}`} size="small" />
-              <Chip label={`Unit: ${request.args.unit || 'count'}`} size="small" />
-              {request.args.target_date && (
-                <Chip label={`Due: ${request.args.target_date}`} size="small" variant="outlined" />
+              <Chip
+                label={`Unit: ${request.args.unit || "count"}`}
+                size="small"
+              />
+              {(request.args.target_date as string) && (
+                <Chip
+                  label={`Due: ${request.args.target_date}`}
+                  size="small"
+                  variant="outlined"
+                />
               )}
             </Stack>
           </Paper>
@@ -115,49 +133,68 @@ export default function AgentChat({ onClose }: AgentChatProps) {
       );
     }
 
-    if (request.name === 'create_tactic') {
+    if (request.name === "create_tactic") {
       return (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
             Tactic Preview:
           </Typography>
-          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: "grey.50" }}>
             <Typography variant="subtitle2" gutterBottom>
               {request.args.title as string}
             </Typography>
-            {request.args.description && (
+            {(request.args.description as string) && (
               <Typography variant="body2" color="text.secondary" paragraph>
                 {request.args.description as string}
               </Typography>
             )}
             <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
-              <Chip label={`Weight: ${request.args.weight || 1.0}`} size="small" />
-              <Chip label={`Recurrence: ${request.args.recurrence || 'weekly'}`} size="small" />
+              <Chip
+                label={`Weight: ${request.args.weight || 1.0}`}
+                size="small"
+              />
+              <Chip
+                label={`Recurrence: ${request.args.recurrence || "weekly"}`}
+                size="small"
+              />
             </Stack>
           </Paper>
         </Box>
       );
     }
 
-    if (request.name === 'submit_wpr') {
+    if (request.name === "submit_wpr") {
       return (
         <Box sx={{ mt: 1 }}>
           <Typography variant="caption" color="text.secondary" gutterBottom>
             WPR Summary:
           </Typography>
-          <Paper variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: "grey.50" }}>
             <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-              <Chip 
-                label={`Lead Score: ${request.args.lead_score}%`} 
-                color={Number(request.args.lead_score) >= 85 ? "success" : "warning"} 
-                size="small" 
+              <Chip
+                label={`Lead Score: ${request.args.lead_score}%`}
+                color={
+                  Number(request.args.lead_score) >= 85 ? "success" : "warning"
+                }
+                size="small"
               />
-              <Chip label={`Week: ${request.args.week_start}`} size="small" variant="outlined" />
+              <Chip
+                label={`Week: ${request.args.week_start}`}
+                size="small"
+                variant="outlined"
+              />
             </Stack>
             <Typography variant="subtitle2" gutterBottom>
               Notes & Decisions:
             </Typography>
-            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8rem' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                whiteSpace: "pre-wrap",
+                fontFamily: "monospace",
+                fontSize: "0.8rem",
+              }}
+            >
               {request.args.notes as string}
             </Typography>
           </Paper>
@@ -165,15 +202,20 @@ export default function AgentChat({ onClose }: AgentChatProps) {
       );
     }
 
-    if (request.name === 'get_daily_briefing') {
-      // This is an analysis tool, usually doesn't require confirmation, 
+    if (request.name === "get_daily_briefing") {
+      // This is an analysis tool, usually doesn't require confirmation,
       // but if it did, we'd render it here.
       // Since it's read-only, it likely won't trigger this block unless configured to.
-      return null; 
+      return null;
     }
 
     return (
-      <Typography variant="caption" color="text.secondary" component="pre" sx={{ overflowX: 'auto' }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        component="pre"
+        sx={{ overflowX: "auto" }}
+      >
         {JSON.stringify(request.args, null, 2)}
       </Typography>
     );
@@ -266,36 +308,36 @@ export default function AgentChat({ onClose }: AgentChatProps) {
                   "& p": { m: 0, mb: 1 },
                   "& p:last-child": { mb: 0 },
                   "& ul, & ol": { m: 0, pl: 2, mb: 1 },
-                  "& pre": { 
-                    bgcolor: "rgba(0,0,0,0.1)", 
-                    p: 1, 
-                    borderRadius: 1, 
+                  "& pre": {
+                    bgcolor: "rgba(0,0,0,0.1)",
+                    p: 1,
+                    borderRadius: 1,
                     overflowX: "auto",
                     fontFamily: "monospace",
-                    fontSize: "0.85rem"
+                    fontSize: "0.85rem",
                   },
                   "& code": {
                     bgcolor: "rgba(0,0,0,0.1)",
                     px: 0.5,
                     borderRadius: 0.5,
                     fontFamily: "monospace",
-                    fontSize: "0.85rem"
+                    fontSize: "0.85rem",
                   },
                   "& table": {
                     borderCollapse: "collapse",
                     width: "100%",
                     mb: 1,
-                    fontSize: "0.875rem"
+                    fontSize: "0.875rem",
                   },
                   "& th, & td": {
                     border: "1px solid rgba(0,0,0,0.1)",
                     p: 0.5,
-                    textAlign: "left"
+                    textAlign: "left",
                   },
                   "& th": {
                     bgcolor: "rgba(0,0,0,0.05)",
-                    fontWeight: "bold"
-                  }
+                    fontWeight: "bold",
+                  },
                 }}
               >
                 {message.role === "user" ? (
@@ -372,7 +414,10 @@ export default function AgentChat({ onClose }: AgentChatProps) {
 
         {/* Confirmation Request */}
         {confirmationRequest && (
-          <Card variant="outlined" sx={{ borderColor: "warning.main", bgcolor: "warning.light" }}>
+          <Card
+            variant="outlined"
+            sx={{ borderColor: "warning.main", bgcolor: "warning.light" }}
+          >
             <CardContent>
               <Typography variant="subtitle1" gutterBottom fontWeight="bold">
                 Confirmation Required
@@ -380,7 +425,14 @@ export default function AgentChat({ onClose }: AgentChatProps) {
               <Typography variant="body2">
                 The agent wants to perform the following action:
               </Typography>
-              <Box sx={{ mt: 1, p: 1, bgcolor: "background.paper", borderRadius: 1 }}>
+              <Box
+                sx={{
+                  mt: 1,
+                  p: 1,
+                  bgcolor: "background.paper",
+                  borderRadius: 1,
+                }}
+              >
                 <Typography variant="body2" fontFamily="monospace" gutterBottom>
                   {confirmationRequest.name}
                 </Typography>
@@ -388,10 +440,21 @@ export default function AgentChat({ onClose }: AgentChatProps) {
               </Box>
             </CardContent>
             <CardActions>
-              <Button size="small" color="inherit" onClick={cancelAction} disabled={isLoading}>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={cancelAction}
+                disabled={isLoading}
+              >
                 Cancel
               </Button>
-              <Button size="small" variant="contained" color="warning" onClick={confirmAction} disabled={isLoading}>
+              <Button
+                size="small"
+                variant="contained"
+                color="warning"
+                onClick={confirmAction}
+                disabled={isLoading}
+              >
                 Confirm Action
               </Button>
             </CardActions>
@@ -439,7 +502,11 @@ export default function AgentChat({ onClose }: AgentChatProps) {
           onClose={() => setToast(null)}
           anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
         >
-          <Alert onClose={() => setToast(null)} severity={toast.severity} sx={{ width: '100%' }}>
+          <Alert
+            onClose={() => setToast(null)}
+            severity={toast.severity}
+            sx={{ width: "100%" }}
+          >
             {toast.message}
           </Alert>
         </Snackbar>

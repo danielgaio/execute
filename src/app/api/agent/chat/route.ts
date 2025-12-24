@@ -45,14 +45,17 @@ export async function POST(request: NextRequest) {
 
     if (!userContent && !confirmedToolCallId && !cancelledToolCallId) {
       return NextResponse.json(
-        { error: "Invalid request: message or confirmation/cancellation required" },
+        {
+          error:
+            "Invalid request: message or confirmation/cancellation required",
+        },
         { status: 400 }
       );
     }
 
     // Get user's organization (validate access if orgId provided, otherwise get default)
     let targetOrgId = orgId;
-    
+
     // If no orgId in body, check cookie
     if (!targetOrgId) {
       const { cookies } = await import("next/headers");
@@ -100,7 +103,10 @@ export async function POST(request: NextRequest) {
         conversationId = undefined;
       } else {
         // Load history
-        history = await conversationService.getMessages(supabase, conversationId);
+        history = await conversationService.getMessages(
+          supabase,
+          conversationId
+        );
       }
     }
 
@@ -116,14 +122,18 @@ export async function POST(request: NextRequest) {
 
     // 2. Save user message (only if new content provided)
     let messagesToProcess = history;
-    
+
     if (userContent) {
       const userMessage: OpenAI.Chat.ChatCompletionMessageParam = {
         role: "user",
         content: userContent,
       };
-      
-      await conversationService.addMessage(supabase, conversationId!, userMessage);
+
+      await conversationService.addMessage(
+        supabase,
+        conversationId!,
+        userMessage
+      );
       messagesToProcess = [...history, userMessage];
     }
 
@@ -150,7 +160,7 @@ export async function POST(request: NextRequest) {
     // Handle Streaming Response
     if (result.stream) {
       const encoder = new TextEncoder();
-      
+
       const stream = new ReadableStream({
         async start(controller) {
           try {
@@ -164,7 +174,7 @@ export async function POST(request: NextRequest) {
 
             // 2. Stream Content
             let fullContent = "";
-            
+
             for await (const chunk of result.stream!) {
               const content = chunk.choices[0]?.delta?.content || "";
               if (content) {
@@ -252,7 +262,7 @@ export async function GET() {
       greeting = await agentService.getProactiveGreeting(
         {
           userId: user.id,
-          orgId: membership.orgId,
+          orgId: membership.org_id,
           supabase,
         },
         profile?.full_name || undefined

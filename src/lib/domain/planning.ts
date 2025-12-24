@@ -26,10 +26,12 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
   // 1. Get all active cycles with owner details
   const { data: cycles, error: cycleError } = await supabase
     .from("cycles")
-    .select(`
+    .select(
+      `
       id, org_id, start_date, end_date, owner_user_id, title,
       owner:owner_user_id ( email, full_name )
-    `)
+    `
+    )
     .eq("status", "active");
 
   if (cycleError || !cycles) {
@@ -37,7 +39,11 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
     return { generated: 0, errors: [cycleError], notifications: [] as any[] };
   }
 
-  const results = { generated: 0, errors: [] as any[], notifications: [] as any[] };
+  const results = {
+    generated: 0,
+    errors: [] as any[],
+    notifications: [] as any[],
+  };
   const today = new Date();
   const currentWeekStart = getWeekStart(today); // Monday of current week
   const currentWeekStartStr = currentWeekStart.toISOString().split("T")[0];
@@ -47,9 +53,9 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
       // Check if cycle is currently active (date-wise)
       const cycleStart = new Date(cycle.start_date);
       const cycleEnd = new Date(cycle.end_date);
-      
-      if (currentWeekStart > cycleEnd) continue; 
-      
+
+      if (currentWeekStart > cycleEnd) continue;
+
       const currentWeekEnd = new Date(currentWeekStart);
       currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
       if (currentWeekEnd < cycleStart) continue;
@@ -63,13 +69,15 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
         .single();
 
       if (!existingPlan) {
-        const { error: planError } = await supabase.from("weekly_plans").insert({
-          cycle_id: cycle.id,
-          org_id: cycle.org_id,
-          week_start: currentWeekStartStr,
-          owner_user_id: cycle.owner_user_id,
-          status: "draft",
-        });
+        const { error: planError } = await supabase
+          .from("weekly_plans")
+          .insert({
+            cycle_id: cycle.id,
+            org_id: cycle.org_id,
+            week_start: currentWeekStartStr,
+            owner_user_id: cycle.owner_user_id,
+            status: "draft",
+          });
         if (planError) throw planError;
       }
 
@@ -85,26 +93,29 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
       let tacticsGenerated = 0;
       if (tactics) {
         for (const tactic of tactics) {
-           await generateInstancesForTactic(supabase, tactic as any, currentWeekStart);
-           tacticsGenerated++;
+          await generateInstancesForTactic(
+            supabase,
+            tactic as any,
+            currentWeekStart
+          );
+          tacticsGenerated++;
         }
       }
       results.generated++;
 
       // Queue notification if owner has email
       // @ts-ignore
-      const owner = cycle.owner;
+      const owner = Array.isArray(cycle.owner) ? cycle.owner[0] : cycle.owner;
       if (owner && owner.email) {
         results.notifications.push({
-          type: 'weekly_plan_ready',
+          type: "weekly_plan_ready",
           email: owner.email,
-          name: owner.full_name || 'User',
+          name: owner.full_name || "User",
           cycleTitle: cycle.title,
           weekStart: currentWeekStartStr,
-          itemCount: tacticsGenerated
+          itemCount: tacticsGenerated,
         });
       }
-
     } catch (e) {
       console.error(`Error processing cycle ${cycle.id}:`, e);
       results.errors.push({ cycleId: cycle.id, error: e });
@@ -161,8 +172,9 @@ export async function generateInstancesForTactic(
   const instances: TacticInstance[] = [];
 
   if (tactic.recurrence === "weekly") {
-    const dueDays = tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
-    
+    const dueDays =
+      tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
+
     for (const dayIndex of dueDays) {
       // weekStart is Monday (1)
       const daysToAdd = dayIndex - 1;
@@ -197,15 +209,16 @@ export async function generateInstancesForTactic(
     // But since we are in 'generateInstancesForTactic' which is usually called for a specific week,
     // we need to be careful.
     // Ideally, we check if it has EVER been scheduled.
-    
+
     const { count } = await supabase
       .from("tactic_instances")
-      .select("id", { count: 'exact', head: true })
+      .select("id", { count: "exact", head: true })
       .eq("tactic_id", tactic.id);
-    
+
     if (count === 0) {
       // Never scheduled. Schedule it for this week.
-      const dueDays = tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
+      const dueDays =
+        tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
       const dayIndex = dueDays[0]; // Take the first one
       const daysToAdd = dayIndex - 1;
       const dueDate = new Date(weekStart);
@@ -225,7 +238,10 @@ export async function generateInstancesForTactic(
   if (instances.length > 0) {
     const { error } = await supabase.from("tactic_instances").insert(instances);
     if (error) {
-      console.error(`Error generating instances for tactic ${tactic.id}:`, error);
+      console.error(
+        `Error generating instances for tactic ${tactic.id}:`,
+        error
+      );
       throw error;
     }
   }

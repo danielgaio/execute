@@ -17,7 +17,7 @@ export const getDailyBriefingTool: AgentTool = {
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
-      const today = params.date || new Date().toISOString().split('T')[0];
+      const today = (params.date as string) || new Date().toISOString().split('T')[0];
       const weekStart = getWeekStart().toISOString().split('T')[0];
 
       // 1. Get Active Cycle
@@ -111,16 +111,22 @@ export const getDailyBriefingTool: AgentTool = {
           currentScore,
           prediction, // Added
           suggestions, // Added
-          todaysTactics: todaysInstances?.map(i => ({
-            title: i.tactics?.title,
-            status: i.status,
-            weight: i.tactics?.weight
-          })) || [],
-          overdueTactics: weekInstances?.map(i => ({
-            title: i.tactics?.title,
-            dueDate: i.due_date,
-            weight: i.tactics?.weight
-          })) || [],
+          todaysTactics: todaysInstances?.map((i: any) => {
+            const tactic = Array.isArray(i.tactics) ? i.tactics[0] : i.tactics;
+            return {
+              title: tactic?.title,
+              status: i.status,
+              weight: tactic?.weight
+            };
+          }) || [],
+          overdueTactics: weekInstances?.map((i: any) => {
+            const tactic = Array.isArray(i.tactics) ? i.tactics[0] : i.tactics;
+            return {
+              title: tactic?.title,
+              dueDate: i.due_date,
+              weight: tactic?.weight
+            };
+          }) || [],
           message: "Daily briefing generated with predictive analysis."
         }
       };

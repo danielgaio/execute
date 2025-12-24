@@ -87,20 +87,29 @@ export default function ExecutionDashboard({
     : 1;
 
   const cycleProgress = activeCycle
-    ? Math.min(100, Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100))
+    ? Math.min(
+        100,
+        Math.max(0, ((totalDays - daysRemaining) / totalDays) * 100)
+      )
     : 0;
 
   return (
     <Grid container spacing={3}>
       {/* Score Card */}
-      <Grid item xs={12} md={4}>
-        <Card sx={{ height: "100%", position: "relative", overflow: "visible" }}>
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Card
+          sx={{ height: "100%", position: "relative", overflow: "visible" }}
+        >
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               WEEKLY EXECUTION SCORE
             </Typography>
             <Box sx={{ display: "flex", alignItems: "baseline", mb: 1 }}>
-              <Typography variant="h2" color={`${statusColor}.main`} fontWeight="bold">
+              <Typography
+                variant="h2"
+                color={`${statusColor}.main`}
+                fontWeight="bold"
+              >
                 {weeklyScore}%
               </Typography>
               <Typography variant="h6" color="text.secondary" sx={{ ml: 1 }}>
@@ -117,9 +126,15 @@ export default function ExecutionDashboard({
               Keep executing your lead measures to drive results.
             </Typography>
             <QuickAddTask goals={goals} />
-            
+
             <Box sx={{ mt: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  mb: 0.5,
+                }}
+              >
                 <Typography variant="caption" color="text.secondary">
                   Cycle Progress
                 </Typography>
@@ -127,42 +142,28 @@ export default function ExecutionDashboard({
                   {Math.round(cycleProgress)}%
                 </Typography>
               </Box>
-              <LinearProgress 
-                variant="determinate" 
-                value={cycleProgress} 
-                sx={{ height: 4, borderRadius: 2, bgcolor: 'action.hover' }} 
+              <LinearProgress
+                variant="determinate"
+                value={cycleProgress}
+                sx={{ height: 4, borderRadius: 2, bgcolor: "action.hover" }}
               />
             </Box>
           </CardContent>
         </Card>
       </Grid>
 
-
       {/* Vision Card (Replaces Cycle Progress for now, or we can move Cycle Progress elsewhere) */}
-      <Grid item xs={12} md={4}>
+      <Grid size={{ xs: 12, md: 4 }}>
         <VisionCard vision={vision} />
       </Grid>
 
       {/* Goals Card (Lag Indicators) */}
-      <Grid item xs={12} md={4}>
+      <Grid size={{ xs: 12, md: 4 }}>
         <GoalsCard goals={goals} cycleProgress={cycleProgress} />
       </Grid>
 
-            <LinearProgress
-              variant="determinate"
-              value={weeklyScore}
-              color={statusColor}
-              sx={{ height: 10, borderRadius: 5, mb: 2 }}
-            />
-            <Typography variant="body2" color="text.secondary">
-              Keep executing your lead indicators to drive results.
-            </Typography>
-          </CardContent>
-        </Card>
-      </Grid>
-
       {/* Cycle Status Card */}
-      <Grid item xs={12} md={4}>
+      <Grid size={{ xs: 12, md: 4 }}>
         <Card sx={{ height: "100%" }}>
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
@@ -171,7 +172,12 @@ export default function ExecutionDashboard({
             <Typography variant="h5" gutterBottom>
               {activeCycle?.title || "No Active Cycle"}
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{ mb: 2 }}
+            >
               <CalendarIcon color="action" fontSize="small" />
               <Typography variant="body1">
                 {daysRemaining} days remaining
@@ -195,12 +201,29 @@ export default function ExecutionDashboard({
       </Grid>
 
       {/* Quick Actions / Stats */}
-      <Grid item xs={12} md={4}>
-        <Card sx={{ height: "100%", bgcolor: "primary.main", color: "primary.contrastText" }}>
+      <Grid size={{ xs: 12, md: 4 }}>
+        <Card
+          sx={{
+            height: "100%",
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+          }}
+        >
           <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+              }}
+            >
               <Box>
-                <Typography variant="subtitle2" color="inherit" sx={{ opacity: 0.8 }} gutterBottom>
+                <Typography
+                  variant="subtitle2"
+                  color="inherit"
+                  sx={{ opacity: 0.8 }}
+                  gutterBottom
+                >
                   TODAY'S FOCUS
                 </Typography>
                 <Typography variant="h3" fontWeight="bold">
@@ -210,15 +233,25 @@ export default function ExecutionDashboard({
                   Tasks remaining today
                 </Typography>
               </Box>
-              <Box sx={{ bgcolor: 'rgba(255,255,255,0.2)', borderRadius: 1 }}>
-                 {/* We can't put the button directly here if it uses secondary color which might clash. 
+              <Box sx={{ bgcolor: "rgba(255,255,255,0.2)", borderRadius: 1 }}>
+                {/* We can't put the button directly here if it uses secondary color which might clash. 
                      Let's just put a small icon or keep it simple. 
                      Actually, let's put the button in the Task List header instead. */}
               </Box>
             </Box>
-            
+
             {overdueInstances.length > 0 && (
-              <Box sx={{ mt: 2, bgcolor: "error.dark", p: 1, borderRadius: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                sx={{
+                  mt: 2,
+                  bgcolor: "error.dark",
+                  p: 1,
+                  borderRadius: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
                 <WarningIcon fontSize="small" />
                 <Typography variant="body2" fontWeight="bold">
                   {overdueInstances.length} Overdue Items
@@ -230,13 +263,18 @@ export default function ExecutionDashboard({
       </Grid>
 
       {/* Task List */}
-      <Grid item xs={12}>
+      <Grid size={{ xs: 12 }}>
         <Card>
           <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Execution Plan
-              </Typography>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 2,
+              }}
+            >
+              <Typography variant="h6">Execution Plan</Typography>
               <DailyBriefingButton />
             </Box>
             <List>
@@ -252,7 +290,9 @@ export default function ExecutionDashboard({
                     <Checkbox
                       edge="start"
                       checked={instance.status === "done"}
-                      onChange={() => handleToggle(instance.id, instance.status)}
+                      onChange={() =>
+                        handleToggle(instance.id, instance.status)
+                      }
                       disabled={isPending}
                       color="error"
                     />
@@ -267,41 +307,46 @@ export default function ExecutionDashboard({
                   />
                 </ListItem>
               ))}
-              
+
               {todaysInstances.map((instance) => (
-                <ListItem
-                  key={instance.id}
-                  disablePadding
-                >
+                <ListItem key={instance.id} disablePadding>
                   <ListItemIcon>
                     <Checkbox
                       edge="start"
                       checked={instance.status === "done"}
-                      onChange={() => handleToggle(instance.id, instance.status)}
+                      onChange={() =>
+                        handleToggle(instance.id, instance.status)
+                      }
                       disabled={isPending}
                     />
                   </ListItemIcon>
                   <ListItemText
                     primary={instance.tactics?.title}
-                    secondary={instance.tactics?.weight ? `Weight: ${instance.tactics.weight}` : null}
+                    secondary={
+                      instance.tactics?.weight
+                        ? `Weight: ${instance.tactics.weight}`
+                        : null
+                    }
                     sx={{
-                      textDecoration: instance.status === "done" ? "line-through" : "none",
+                      textDecoration:
+                        instance.status === "done" ? "line-through" : "none",
                       opacity: instance.status === "done" ? 0.6 : 1,
                     }}
                   />
                 </ListItem>
               ))}
 
-              {todaysInstances.length === 0 && overdueInstances.length === 0 && (
-                <Box sx={{ py: 4, textAlign: "center" }}>
-                  <Typography color="text.secondary">
-                    No tasks scheduled for today.
-                  </Typography>
-                  <Typography variant="caption" color="text.disabled">
-                    Ask the agent to "Plan my week" if this seems wrong.
-                  </Typography>
-                </Box>
-              )}
+              {todaysInstances.length === 0 &&
+                overdueInstances.length === 0 && (
+                  <Box sx={{ py: 4, textAlign: "center" }}>
+                    <Typography color="text.secondary">
+                      No tasks scheduled for today.
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled">
+                      Ask the agent to "Plan my week" if this seems wrong.
+                    </Typography>
+                  </Box>
+                )}
             </List>
           </CardContent>
         </Card>

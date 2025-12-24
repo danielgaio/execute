@@ -22,12 +22,8 @@ export const createCycleTool: AgentTool = {
   requiresConfirmation: true,
   parameters: z.object({
     title: z.string().describe("Title of the cycle (e.g., 'Q4 2025 Push')"),
-    start_date: z
-      .string()
-      .describe("Start date of the cycle (YYYY-MM-DD)"),
-    end_date: z
-      .string()
-      .describe("End date of the cycle (YYYY-MM-DD)"),
+    start_date: z.string().describe("Start date of the cycle (YYYY-MM-DD)"),
+    end_date: z.string().describe("End date of the cycle (YYYY-MM-DD)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -47,7 +43,11 @@ export const createCycleTool: AgentTool = {
       if (error) throw error;
 
       // Index for RAG
-      await embeddingService.indexCycle(context.supabase, cycle, context.orgId!);
+      await embeddingService.indexCycle(
+        context.supabase,
+        cycle,
+        context.orgId!
+      );
 
       // Log agent action to audit trail
       await logAgentAction(context.supabase, {
@@ -74,7 +74,8 @@ export const createCycleTool: AgentTool = {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to create cycle",
+        error:
+          error instanceof Error ? error.message : "Failed to create cycle",
       };
     }
   },
@@ -93,7 +94,10 @@ export const createGoalTool: AgentTool = {
     cycle_id: z.string().describe("ID of the cycle this goal belongs to"),
     title: z.string().describe("Title of the goal"),
     description: z.string().optional().describe("Description of the goal"),
-    unit: z.string().optional().describe("Unit of measurement (e.g., 'USD', '%')"),
+    unit: z
+      .string()
+      .optional()
+      .describe("Unit of measurement (e.g., 'USD', '%')"),
     target: z.number().describe("Target value to achieve"),
     baseline: z.number().optional().describe("Starting value (default: 0)"),
     target_date: z.string().optional().describe("Target date (YYYY-MM-DD)"),
@@ -166,22 +170,48 @@ export const createTacticTool: AgentTool = {
     goal_id: z.string().describe("ID of the goal this tactic supports"),
     title: z.string().describe("Title of the tactic"),
     description: z.string().optional().describe("Description of the tactic"),
-    weight: z.number().optional().describe("Weight of the tactic (0.1 to 1.0, default: 1.0)"),
-    recurrence: z.enum(["weekly", "daily", "one_off"]).optional().describe("Recurrence pattern (default: weekly)"),
-    due_days: z.array(z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])).optional().describe("Days of the week the tactic is due (for weekly recurrence). Default: ['Friday']"),
+    weight: z
+      .number()
+      .optional()
+      .describe("Weight of the tactic (0.1 to 1.0, default: 1.0)"),
+    recurrence: z
+      .enum(["weekly", "daily", "one_off"])
+      .optional()
+      .describe("Recurrence pattern (default: weekly)"),
+    due_days: z
+      .array(
+        z.enum([
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday",
+        ])
+      )
+      .optional()
+      .describe(
+        "Days of the week the tactic is due (for weekly recurrence). Default: ['Friday']"
+      ),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
       // Map day name to index (1=Monday, 7=Sunday)
       const dayMap: Record<string, number> = {
-        "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, 
-        "Friday": 5, "Saturday": 6, "Sunday": 7
+        Monday: 1,
+        Tuesday: 2,
+        Wednesday: 3,
+        Thursday: 4,
+        Friday: 5,
+        Saturday: 6,
+        Sunday: 7,
       };
-      
+
       let dueDays: number[] = [5]; // Default to Friday
 
-      if (params.due_days && params.due_days.length > 0) {
-        dueDays = params.due_days.map(d => dayMap[d]);
+      if (params.due_days && (params.due_days as string[]).length > 0) {
+        dueDays = (params.due_days as string[]).map((d) => dayMap[d]);
       }
 
       const { data: tactic, error } = await context.supabase
@@ -203,7 +233,11 @@ export const createTacticTool: AgentTool = {
       if (error) throw error;
 
       // Index for RAG
-      await embeddingService.indexTactic(context.supabase, tactic, context.orgId!);
+      await embeddingService.indexTactic(
+        context.supabase,
+        tactic,
+        context.orgId!
+      );
 
       // Log agent action
       await logAgentAction(context.supabase, {
@@ -241,7 +275,8 @@ export const createTacticTool: AgentTool = {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to create tactic",
+        error:
+          error instanceof Error ? error.message : "Failed to create tactic",
       };
     }
   },
@@ -366,7 +401,7 @@ export const deferTacticTool: AgentTool = {
         context.supabase,
         params.instance_id as string,
         context.orgId!,
-        params.reason
+        params.reason as string | undefined
       );
 
       // Fetch updated instance
@@ -389,7 +424,7 @@ export const deferTacticTool: AgentTool = {
         metadata: {
           confirmed: true,
           defer_reason: params.reason,
-          new_due_date: result.nextDueDate
+          new_due_date: result.nextDueDate,
         },
       });
 
@@ -414,35 +449,55 @@ export const deferTacticTool: AgentTool = {
  */
 export const bulkUpdateTacticsTool: AgentTool = {
   name: "bulk_update_tactics",
-  description: "Perform bulk actions on multiple tactic instances. Useful for cleaning up pending items during a Weekly Review (e.g., 'Defer all pending').",
+  description:
+    "Perform bulk actions on multiple tactic instances. Useful for cleaning up pending items during a Weekly Review (e.g., 'Defer all pending').",
   category: "action",
   requiresConfirmation: true,
   parameters: z.object({
-    instance_ids: z.array(z.string()).describe("List of tactic instance IDs to update"),
+    instance_ids: z
+      .array(z.string())
+      .describe("List of tactic instance IDs to update"),
     action: z.enum(["defer", "skip", "complete"]).describe("Action to perform"),
-    reason: z.string().optional().describe("Reason for the action (e.g., 'WPR Cleanup')"),
+    reason: z
+      .string()
+      .optional()
+      .describe("Reason for the action (e.g., 'WPR Cleanup')"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
       const results = [];
       const errors = [];
 
-      for (const id of params.instance_ids) {
+      for (const id of params.instance_ids as string[]) {
         try {
           if (params.action === "defer") {
-            await deferInstance(context.supabase, id, context.orgId!, params.reason);
+            await deferInstance(
+              context.supabase,
+              id,
+              context.orgId!,
+              params.reason as string | undefined
+            );
             results.push(id);
           } else if (params.action === "skip") {
-            await skipInstance(context.supabase, id, context.orgId!, params.reason);
+            await skipInstance(
+              context.supabase,
+              id,
+              context.orgId!,
+              params.reason as string | undefined
+            );
             results.push(id);
           } else if (params.action === "complete") {
-             // Reuse existing logic or simple update
-             await context.supabase
-               .from("tactic_instances")
-               .update({ status: "done", notes: params.reason, updated_at: new Date().toISOString() })
-               .eq("id", id)
-               .eq("org_id", context.orgId!);
-             results.push(id);
+            // Reuse existing logic or simple update
+            await context.supabase
+              .from("tactic_instances")
+              .update({
+                status: "done",
+                notes: params.reason,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", id)
+              .eq("org_id", context.orgId!);
+            results.push(id);
           }
         } catch (e: any) {
           errors.push({ id, error: e.message });
@@ -457,12 +512,12 @@ export const bulkUpdateTacticsTool: AgentTool = {
         action: "update",
         entityType: "tactic_instance", // Generic
         entityId: "bulk",
-        details: {
+        metadata: {
           action: params.action,
           count: results.length,
           ids: results,
-          errors
-        }
+          errors,
+        },
       });
 
       return {
@@ -470,13 +525,15 @@ export const bulkUpdateTacticsTool: AgentTool = {
         data: {
           processed: results.length,
           failed: errors.length,
-          message: `Successfully processed ${results.length} items. ${errors.length > 0 ? `${errors.length} failed.` : ""}`
-        }
+          message: `Successfully processed ${results.length} items. ${
+            errors.length > 0 ? `${errors.length} failed.` : ""
+          }`,
+        },
       };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
-  }
+  },
 };
 
 /**
@@ -493,7 +550,10 @@ export const updateTacticTool: AgentTool = {
     title: z.string().optional().describe("New title"),
     description: z.string().optional().describe("New description"),
     weight: z.number().optional().describe("New weight (0.1 to 1.0)"),
-    due_days: z.array(z.number().min(1).max(7)).optional().describe("New due days (1=Monday, 7=Sunday)"),
+    due_days: z
+      .array(z.number().min(1).max(7))
+      .optional()
+      .describe("New due days (1=Monday, 7=Sunday)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -530,7 +590,11 @@ export const updateTacticTool: AgentTool = {
 
       // Re-index if content changed
       if (params.title || params.description || params.weight) {
-        await embeddingService.indexTactic(context.supabase, tactic, context.orgId!);
+        await embeddingService.indexTactic(
+          context.supabase,
+          tactic,
+          context.orgId!
+        );
       }
 
       // Log agent action
@@ -604,7 +668,7 @@ export const createVisionTool: AgentTool = {
           .eq("id", existingVision.id)
           .select()
           .single();
-        
+
         if (error) throw error;
         vision = data;
       } else {
@@ -619,13 +683,17 @@ export const createVisionTool: AgentTool = {
           })
           .select()
           .single();
-          
+
         if (error) throw error;
         vision = data;
       }
 
       // Index for RAG
-      await embeddingService.indexVision(context.supabase, vision, context.orgId!);
+      await embeddingService.indexVision(
+        context.supabase,
+        vision,
+        context.orgId!
+      );
 
       // Log agent action
       await logAgentAction(context.supabase, {
@@ -639,8 +707,8 @@ export const createVisionTool: AgentTool = {
         afterState: vision,
         metadata: {
           confirmed: true,
-          content_length: params.content.length
-        }
+          content_length: (params.content as string).length,
+        },
       });
 
       return {
@@ -648,7 +716,7 @@ export const createVisionTool: AgentTool = {
         data: {
           vision,
           message: `✅ Vision ${actionType}d successfully.`,
-        }
+        },
       };
     } catch (error: any) {
       return {
