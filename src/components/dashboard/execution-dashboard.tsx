@@ -31,6 +31,7 @@ import { getPerformanceStatus } from "@/lib/domain/scoring";
 import { useTransition } from "react";
 import DailyBriefingButton from "./daily-briefing-button";
 import GoalsCard from "./goals-card";
+import QuickAddTask from "./quick-add-task";
 import { Goal } from "@/lib/domain/goals";
 
 interface ExecutionDashboardProps {
@@ -108,12 +109,14 @@ export default function ExecutionDashboard({
               color={statusColor}
               sx={{ height: 8, borderRadius: 4, mb: 2 }}
             />
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Keep executing your lead measures to drive results.
             </Typography>
+            <QuickAddTask goals={goals} />
           </CardContent>
         </Card>
       </Grid>
+
 
       {/* Cycle Progress Card */}
       <Grid item xs={12} md={4}>

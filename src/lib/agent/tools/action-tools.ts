@@ -222,11 +222,10 @@ export const createTacticTool: AgentTool = {
 
       // Generate instances for current week
       try {
-        await generateTacticInstancesForWeek(
+        await generateInstancesForTacticId(
           context.supabase,
           tactic.id,
-          getWeekStart(),
-          context.orgId!
+          getWeekStart()
         );
       } catch (e) {
         console.error("Error generating instances:", e);
