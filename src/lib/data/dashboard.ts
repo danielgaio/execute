@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { getWeekStart } from "@/utils/planning";
 import { calculateLeadScore, ScorableItem } from "@/lib/domain/scoring";
+import { Goal } from "@/lib/domain/goals";
 
 export interface DashboardData {
   activeCycle: any | null;
@@ -8,6 +9,7 @@ export interface DashboardData {
   todaysInstances: any[];
   overdueInstances: any[];
   weekStart: string;
+  goals: Goal[];
 }
 
 export async function getDashboardData(
@@ -23,7 +25,25 @@ export async function getDashboardData(
     .order("created_at", { ascending: false })
     .single();
 
-  // 2. Fetch Today's Instances
+  // 2. Fetch Goals (if cycle exists)
+  let goals: Goal[] = [];
+  if (activeCycle) {
+    const { data: fetchedGoals } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("cycle_id", activeCycle.id)
+      .order("created_at", { ascending: true });
+    
+    if (fetchedGoals) {
+      goals = fetchedGoals.map((g: any) => ({
+        ...g,
+        start_date: activeCycle.start_date,
+        target_date: g.target_date || activeCycle.end_date
+      }));
+    }
+  }
+
+  // 3. Fetch Today's Instances
   const today = new Date().toISOString().split("T")[0];
   const { data: todaysInstances } = await supabase
     .from("tactic_instances")
@@ -36,11 +56,9 @@ export async function getDashboardData(
     `)
     .eq("org_id", orgId)
     .eq("due_date", today)
-    .order("status", { ascending: false }); // Done items first? Or pending first? Usually pending first is better for "To Do" lists.
-    // Let's sort by status: pending first. 'pending' > 'done' alphabetically? No.
-    // We'll sort in memory or refine query later.
+    .order("status", { ascending: false }); 
 
-  // 3. Fetch Overdue Instances (Pending items from past)
+  // 4. Fetch Overdue Instances (Pending items from past)
   const { data: overdueInstances } = await supabase
     .from("tactic_instances")
     .select(`
@@ -55,7 +73,7 @@ export async function getDashboardData(
     .eq("status", "pending")
     .order("due_date", { ascending: true });
 
-  // 4. Calculate Weekly Score
+  // 5. Calculate Weekly Score
   const weekStart = getWeekStart().toISOString().split("T")[0];
   const { data: weeklyInstances } = await supabase
     .from("tactic_instances")
@@ -87,5 +105,6 @@ export async function getDashboardData(
     todaysInstances: todaysInstances || [],
     overdueInstances: overdueInstances || [],
     weekStart,
+    goals,
   };
 }

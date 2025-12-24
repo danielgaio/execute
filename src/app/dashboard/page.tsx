@@ -34,7 +34,7 @@ export default async function DashboardPage() {
     : memberships[0].org_id
 
   // Fetch Dashboard Data
-  const { activeCycle, weeklyScore, todaysInstances, overdueInstances } = await getDashboardData(supabase, currentOrgId)
+  const { activeCycle, weeklyScore, todaysInstances, overdueInstances, goals } = await getDashboardData(supabase, currentOrgId)
 
   return (
     <Box>
@@ -55,6 +55,7 @@ export default async function DashboardPage() {
           weeklyScore={weeklyScore}
           todaysInstances={todaysInstances}
           overdueInstances={overdueInstances}
+          goals={goals}
         />
       )}
     </Box>

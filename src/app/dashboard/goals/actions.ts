@@ -74,3 +74,39 @@ export async function createGoal(formData: FormData) {
   revalidatePath('/dashboard/goals')
   redirect('/dashboard/goals')
 }
+
+export async function updateGoalMeasurement(goalId: string, value: number, notes?: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Not authenticated' }
+
+  // Verify ownership/membership
+  const { data: membership } = await supabase
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!membership) return { error: 'No organization found' }
+
+  // Insert measurement
+  const { error: measurementError } = await supabase
+    .from('goal_measurements')
+    .insert({
+      goal_id: goalId,
+      org_id: membership.org_id,
+      value: value,
+      notes: notes,
+      created_by: user.id
+    })
+
+  if (measurementError) return { error: measurementError.message }
+
+  // Trigger updates goal.current_value automatically via DB trigger, 
+  // but we revalidate to show changes in UI
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/goals')
+  
+  return { success: true }
+}
