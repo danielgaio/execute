@@ -4,9 +4,11 @@ import { getWeekStart } from "@/utils/planning";
 export interface Tactic {
   id: string;
   title: string;
-  recurrence: "weekly" | "daily" | "one_off";
+  recurrence: "weekly" | "daily" | "one_off" | "custom";
+  recurrence_interval?: number;
   due_days?: number[]; // 1=Monday, 7=Sunday
   org_id: string;
+  created_at?: string;
 }
 
 export interface TacticInstance {
@@ -171,7 +173,22 @@ export async function generateInstancesForTactic(
 
   const instances: TacticInstance[] = [];
 
-  if (tactic.recurrence === "weekly") {
+  // Handle Weekly / Custom Recurrence
+  if (tactic.recurrence === "weekly" || tactic.recurrence === "custom") {
+    // Check recurrence interval
+    const interval = tactic.recurrence_interval || 1;
+    if (interval > 1 && tactic.created_at) {
+      const createdDate = new Date(tactic.created_at);
+      const createdWeekStart = getWeekStart(createdDate);
+      const diffTime = weekStart.getTime() - createdWeekStart.getTime();
+      const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
+
+      // If not the right week, skip
+      if (diffWeeks % interval !== 0) {
+        return;
+      }
+    }
+
     const dueDays =
       tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
 
@@ -191,10 +208,17 @@ export async function generateInstancesForTactic(
       });
     }
   } else if (tactic.recurrence === "daily") {
-    // Generate for Mon-Fri (Business Days)
-    for (let i = 0; i < 5; i++) {
+    // Generate for specified days or Mon-Fri (Business Days)
+    const daysToGenerate =
+      tactic.due_days && tactic.due_days.length > 0
+        ? tactic.due_days
+        : [1, 2, 3, 4, 5];
+
+    for (const dayIndex of daysToGenerate) {
+      const daysToAdd = dayIndex - 1;
       const dueDate = new Date(weekStart);
-      dueDate.setDate(dueDate.getDate() + i);
+      dueDate.setDate(dueDate.getDate() + daysToAdd);
+
       instances.push({
         tactic_id: tactic.id,
         org_id: tactic.org_id,

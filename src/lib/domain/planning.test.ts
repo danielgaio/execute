@@ -65,7 +65,7 @@ describe("Planning Domain Service", () => {
       ]));
     });
 
-    it("should generate instances for daily recurrence (Mon-Fri)", async () => {
+    it("should generate instances for daily recurrence (Mon-Fri default)", async () => {
       const tactic: Tactic = {
         id: "t2",
         title: "Standup",
@@ -81,6 +81,48 @@ describe("Planning Domain Service", () => {
       expect(inserted).toHaveLength(5); // Mon-Fri
       expect(inserted[0].due_date).toBe("2025-01-06"); // Monday
       expect(inserted[4].due_date).toBe("2025-01-10"); // Friday
+    });
+
+    it("should generate instances for daily recurrence with custom days", async () => {
+      const tactic: Tactic = {
+        id: "t2b",
+        title: "Weekend Check",
+        recurrence: "daily",
+        org_id: "org-1",
+        due_days: [6, 7] // Sat, Sun
+      };
+
+      await generateInstancesForTactic(mockSupabase as unknown as SupabaseClient, tactic, weekStart);
+
+      expect(mockSupabase.insert).toHaveBeenCalled();
+      const inserted = mockSupabase.insert.mock.calls[0][0];
+      expect(inserted).toHaveLength(2);
+      expect(inserted[0].due_date).toBe("2025-01-11"); // Saturday
+      expect(inserted[1].due_date).toBe("2025-01-12"); // Sunday
+    });
+
+    it("should respect recurrence interval (skip week)", async () => {
+      const tactic: Tactic = {
+        id: "t3",
+        title: "Bi-weekly Sync",
+        recurrence: "weekly",
+        recurrence_interval: 2,
+        created_at: "2024-12-23T00:00:00Z", // 2 weeks before 2025-01-06
+        org_id: "org-1",
+        due_days: [1] // Monday
+      };
+
+      // 2024-12-23 is a Monday.
+      // 2025-01-06 is exactly 2 weeks later.
+      // Should generate.
+      await generateInstancesForTactic(mockSupabase as unknown as SupabaseClient, tactic, weekStart);
+      expect(mockSupabase.insert).toHaveBeenCalled();
+
+      // Now try next week (2025-01-13) - should skip
+      mockSupabase.insert.mockClear();
+      const nextWeek = new Date("2025-01-13");
+      await generateInstancesForTactic(mockSupabase as unknown as SupabaseClient, tactic, nextWeek);
+      expect(mockSupabase.insert).not.toHaveBeenCalled();
     });
 
     it("should skip if instances already exist (Idempotency)", async () => {

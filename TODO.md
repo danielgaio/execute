@@ -42,6 +42,10 @@
   - Standardized `due_days` input as string array for better LLM compatibility
 - [x] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
 - [x] Implement streaming responses for agent chat to improve perceived performance
+- [x] Implement advanced recurrence logic in generation engine ✅ **COMPLETED** (Dec 24, 2025)
+  - Updated `generateInstancesForTactic` to handle `recurrence_interval` (e.g., bi-weekly)
+  - Added support for custom daily schedules (e.g., weekends)
+  - Added unit tests for complex recurrence patterns
 
 ### 3. Database Foundation & Multi-Tenant Security
 
