@@ -52,8 +52,8 @@ When a user says "Weekly Review", "WPR", or it's Monday:
 - **bulk_update_tactics**: Use this during Weekly Reviews to efficiently handle multiple pending items (e.g., "Defer all remaining tasks").
 - **Action Tools** (create/update): ALWAYS confirm the details with the user before calling these tools.
 - **create_tactic**:
-    - Always ask for or infer the due day (e.g., "every Friday"). If not specified, default to Friday.
-    - Use the \`due_day\` parameter to specify the day of the week (Monday-Sunday).
+    - Always ask for or infer the due days (e.g., "every Mon and Fri"). If not specified, default to Friday.
+    - Use the \`due_days\` parameter to specify the days of the week (Monday-Sunday).
 
 ---
 

@@ -167,7 +167,7 @@ export const createTacticTool: AgentTool = {
     description: z.string().optional().describe("Description of the tactic"),
     weight: z.number().optional().describe("Weight of the tactic (0.1 to 1.0, default: 1.0)"),
     recurrence: z.enum(["weekly", "daily", "one_off"]).optional().describe("Recurrence pattern (default: weekly)"),
-    due_day: z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]).optional().describe("Day of the week the tactic is due (for weekly recurrence). Default: Friday"),
+    due_days: z.array(z.enum(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])).optional().describe("Days of the week the tactic is due (for weekly recurrence). Default: ['Friday']"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -177,7 +177,11 @@ export const createTacticTool: AgentTool = {
         "Friday": 5, "Saturday": 6, "Sunday": 7
       };
       
-      const dueDays = params.due_day ? [dayMap[params.due_day]] : [5]; // Default to Friday
+      let dueDays: number[] = [5]; // Default to Friday
+
+      if (params.due_days && params.due_days.length > 0) {
+        dueDays = params.due_days.map(d => dayMap[d]);
+      }
 
       const { data: tactic, error } = await context.supabase
         .from("tactics")
@@ -481,7 +485,7 @@ export const bulkUpdateTacticsTool: AgentTool = {
 export const updateTacticTool: AgentTool = {
   name: "update_tactic",
   description:
-    "Update a tactic's configuration. Use this to change the weight (importance), reschedule (change due day), or update the title/description.",
+    "Update a tactic's configuration. Use this to change the weight (importance), reschedule (change due days), or update the title/description.",
   category: "action",
   requiresConfirmation: true,
   parameters: z.object({
@@ -489,7 +493,7 @@ export const updateTacticTool: AgentTool = {
     title: z.string().optional().describe("New title"),
     description: z.string().optional().describe("New description"),
     weight: z.number().optional().describe("New weight (0.1 to 1.0)"),
-    due_day: z.number().min(1).max(7).optional().describe("New due day (1=Monday, 7=Sunday)"),
+    due_days: z.array(z.number().min(1).max(7)).optional().describe("New due days (1=Monday, 7=Sunday)"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -507,7 +511,7 @@ export const updateTacticTool: AgentTool = {
       if (params.title) updates.title = params.title;
       if (params.description) updates.description = params.description;
       if (params.weight !== undefined) updates.weight = params.weight;
-      if (params.due_day !== undefined) updates.due_days = [params.due_day];
+      if (params.due_days !== undefined) updates.due_days = params.due_days;
 
       const { error } = await context.supabase
         .from("tactics")

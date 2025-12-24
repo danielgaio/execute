@@ -156,19 +156,19 @@ describe("Action Tools", () => {
       expect(auditService.logAgentAction).toHaveBeenCalled();
     });
 
-    it("should create a tactic with specific due day", async () => {
-      const mockTactic = { id: "tactic-2", title: "Weekly Report", due_days: [2] }; // Tuesday
+    it("should create a tactic with specific due days", async () => {
+      const mockTactic = { id: "tactic-2", title: "Weekly Report", due_days: [2, 5] }; // Tuesday, Friday
       mockSupabase.single.mockResolvedValue({ data: mockTactic, error: null });
 
       const result = await createTacticTool.handler(
-        { goal_id: "goal-1", title: "Weekly Report", due_day: "Tuesday" },
+        { goal_id: "goal-1", title: "Weekly Report", due_days: ["Tuesday", "Friday"] },
         mockContext
       );
 
       expect(result.success).toBe(true);
       expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
         title: "Weekly Report",
-        due_days: [2], // Expect Tuesday (2)
+        due_days: [2, 5], // Expect Tuesday (2) and Friday (5)
       }));
     });
   });
@@ -240,7 +240,7 @@ describe("Action Tools", () => {
       mockSupabase.select.mockReturnValue({ eq: vi.fn().mockReturnValue({ single: vi.fn().mockResolvedValue({ data: mockTactic, error: null }) }) });
 
       const result = await updateTacticTool.handler(
-        { tactic_id: "tactic-1", title: "New Title", weight: 0.5, due_day: 1 },
+        { tactic_id: "tactic-1", title: "New Title", weight: 0.5, due_days: [1, 3] },
         mockContext
       );
 
@@ -249,7 +249,7 @@ describe("Action Tools", () => {
       expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
         title: "New Title",
         weight: 0.5,
-        due_days: [1],
+        due_days: [1, 3],
       }));
       expect(embeddingService.embeddingService.indexTactic).toHaveBeenCalled();
       expect(auditService.logAgentAction).toHaveBeenCalledWith(
