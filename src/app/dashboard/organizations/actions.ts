@@ -42,6 +42,12 @@ export async function createOrganization(formData: FormData) {
     return { error: memberError.message }
   }
 
-  revalidatePath('/dashboard')
-  return { success: true }
+  // 3. Set Active Org Cookie
+  const { cookies } = await import('next/headers')
+  const cookieStore = await cookies()
+  cookieStore.set('execute_active_org', org.id)
+
+  // 4. Redirect
+  const { redirect } = await import('next/navigation')
+  redirect('/dashboard')
 }
