@@ -15,6 +15,7 @@ import { wprTools } from "./tools/wpr-tools";
 import { executionTools } from "./tools/execution-tools";
 import { teamTools } from "./tools/team-tools";
 import { getDailyBriefingTool } from "./tools/briefing-tools";
+import { completeTacticByNameTool } from "./tools/completion-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 import { logAgentAction } from "./audit-service";
@@ -44,6 +45,7 @@ export class AgentService {
       ...executionTools,
       ...teamTools,
       getDailyBriefingTool,
+      completeTacticByNameTool,
     ];
 
     for (const tool of allTools) {

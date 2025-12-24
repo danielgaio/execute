@@ -118,7 +118,12 @@
   - Registered tool in `AgentService`
   - Added unit tests
 - [ ] Create agent-driven weekly planning: agent pre-populates and explains weekly commitments
-- [ ] Implement conversational task completion: users can say "Mark tactic X done, took 2 hours, good results"
+- [x] Implement conversational task completion: users can say "Mark tactic X done, took 2 hours, good results" ✅ **COMPLETED** (Dec 24, 2025)
+  - Created `complete_tactic_by_name` tool in `completion-tools.ts`
+  - Implemented fuzzy matching (`ilike`) to find pending instances by title
+  - Added logic to handle multiple matches or no matches with clear error messages
+  - Registered tool in `AgentService`
+  - Added unit tests for matching logic
 - [ ] Add agent proactive notifications: "You have 3 high-priority items due today, want to review?"
 - [ ] Build agent progress check-ins: periodic "How's tactic Y going?" with context-aware follow-ups
 - [ ] Create traditional Today/Week dashboard views as secondary interface with agent integration
