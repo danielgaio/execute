@@ -36,6 +36,7 @@ import {
   Close as CloseIcon,
   Business as BusinessIcon,
   Add as AddIcon,
+  People as PeopleIcon,
 } from "@mui/icons-material";
 import { logout } from "@/app/dashboard/actions";
 import { useRouter, usePathname } from "next/navigation";
@@ -123,6 +124,7 @@ function DashboardShellContent({
     { text: "Vision", icon: <VisionIcon />, path: "/dashboard/vision" },
     { text: "Goals", icon: <GoalsIcon />, path: "/dashboard/goals" },
     { text: "Tactics", icon: <TacticsIcon />, path: "/dashboard/tactics" },
+    { text: "Teams", icon: <PeopleIcon />, path: "/dashboard/teams" },
     { text: "Settings", icon: <SettingsIcon />, path: "/dashboard/settings" },
   ];
 
