@@ -51,13 +51,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Get user's organization (validate access if orgId provided, otherwise get default)
+    let targetOrgId = orgId;
+    
+    // If no orgId in body, check cookie
+    if (!targetOrgId) {
+      const { cookies } = await import("next/headers");
+      const cookieStore = await cookies();
+      targetOrgId = cookieStore.get("execute_active_org")?.value;
+    }
+
     let query = supabase
       .from("org_members")
       .select("org_id, role")
       .eq("user_id", user.id);
 
-    if (orgId) {
-      query = query.eq("org_id", orgId);
+    if (targetOrgId) {
+      query = query.eq("org_id", targetOrgId);
     }
 
     const { data: membership } = await query.limit(1).single();
@@ -65,7 +74,7 @@ export async function POST(request: NextRequest) {
     if (!membership) {
       return NextResponse.json(
         {
-          error: orgId
+          error: targetOrgId
             ? "Unauthorized access to organization"
             : "No organization found. Please create or join an organization first.",
         },
