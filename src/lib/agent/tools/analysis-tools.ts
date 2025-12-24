@@ -1040,10 +1040,279 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
   },
 };
 
+/**
+ * Predict end-of-week score based on current progress and historical velocity
+ */
+export const predictScoreTool: AgentTool = {
+  name: "predict_score",
+  description:
+    "Predict the final score for the current week based on completed tasks, remaining tasks, and historical completion rates.",
+  category: "analysis",
+  requiresConfirmation: false,
+  parameters: z.object({
+    week_start: z
+      .string()
+      .optional()
+      .describe("Week start date (YYYY-MM-DD). Defaults to current week."),
+  }),
+  handler: async (
+    params: { week_start?: string },
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    try {
+      const weekStart = params.week_start || getWeekStart().toISOString().split("T")[0];
+      const today = new Date().toISOString().split("T")[0];
+
+      // 1. Get current week's instances
+      const { data: currentInstances, error: currentError } = await context.supabase
+        .from("tactic_instances")
+        .select(`
+          id, status, due_date,
+          tactics ( weight )
+        `)
+        .eq("org_id", context.orgId)
+        .eq("week_start", weekStart)
+        .eq("planned", true);
+
+      if (currentError) throw currentError;
+
+      const instances = (currentInstances || []) as any[];
+      
+      if (instances.length === 0) {
+        return {
+          success: true,
+          data: {
+            message: "No planned tactics found for this week.",
+            predicted_score: 100, // Default if nothing planned
+            confidence: "low"
+          }
+        };
+      }
+
+      // 2. Calculate current state
+      let totalWeight = 0;
+      let completedWeight = 0;
+      let pendingWeight = 0;
+      let overdueWeight = 0;
+
+      instances.forEach(i => {
+        const weight = i.tactics?.weight || 1.0;
+        totalWeight += weight;
+        
+        if (i.status === 'done') {
+          completedWeight += weight;
+        } else if (i.status === 'pending') {
+          pendingWeight += weight;
+          if (i.due_date < today) {
+            overdueWeight += weight;
+          }
+        }
+      });
+
+      const currentScore = totalWeight > 0 
+        ? Math.round((completedWeight / totalWeight) * 100) 
+        : 0;
+
+      // 3. Get historical completion rate (last 4 weeks)
+      // We'll use a simplified query for speed
+      const fourWeeksAgo = new Date();
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+      const fourWeeksAgoStr = fourWeeksAgo.toISOString().split("T")[0];
+
+      const { data: history } = await context.supabase
+        .from("tactic_instances")
+        .select("status")
+        .eq("org_id", context.orgId)
+        .gte("week_start", fourWeeksAgoStr)
+        .lt("week_start", weekStart)
+        .eq("planned", true);
+
+      let historicalRate = 0.8; // Default optimism
+      if (history && history.length > 0) {
+        const completed = history.filter((h: any) => h.status === 'done').length;
+        historicalRate = completed / history.length;
+      }
+
+      // 4. Predict
+      // Prediction = Current Score + (Pending Weight * Historical Rate) / Total Weight
+      // We discount overdue items heavily (50% of historical rate)
+      const predictedAdditionalWeight = 
+        ((pendingWeight - overdueWeight) * historicalRate) + 
+        (overdueWeight * (historicalRate * 0.5));
+      
+      const predictedTotalCompleted = completedWeight + predictedAdditionalWeight;
+      const predictedScore = totalWeight > 0
+        ? Math.round((predictedTotalCompleted / totalWeight) * 100)
+        : 0;
+
+      // 5. Confidence Level
+      // Higher confidence if more of the week is already done
+      const daysPassed = (new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24);
+      let confidence = "medium";
+      if (daysPassed > 5) confidence = "high";
+      if (daysPassed < 2) confidence = "low";
+
+      return {
+        success: true,
+        data: {
+          current_score: currentScore,
+          predicted_score: predictedScore,
+          historical_completion_rate: Math.round(historicalRate * 100),
+          confidence,
+          breakdown: {
+            total_weight: totalWeight,
+            completed_weight: completedWeight,
+            pending_weight: pendingWeight,
+            overdue_weight: overdueWeight
+          },
+          message: `Based on your historical completion rate of ${Math.round(historicalRate * 100)}%, I predict you'll finish the week with a score of ${predictedScore}%.`
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to predict score"
+      };
+    }
+  }
+};
+
+/**
+ * Suggest adjustments to the current plan to improve outcomes
+ */
+export const suggestAdjustmentsTool: AgentTool = {
+  name: "suggest_adjustments",
+  description:
+    "Analyze the current week's plan and suggest specific adjustments (deferrals, reprioritization) to maximize the score.",
+  category: "analysis",
+  requiresConfirmation: false,
+  parameters: z.object({
+    week_start: z
+      .string()
+      .optional()
+      .describe("Week start date (YYYY-MM-DD). Defaults to current week."),
+  }),
+  handler: async (
+    params: { week_start?: string },
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    try {
+      const weekStart = params.week_start || getWeekStart().toISOString().split("T")[0];
+      const today = new Date().toISOString().split("T")[0];
+
+      // 1. Get current week's instances
+      const { data: currentInstances, error } = await context.supabase
+        .from("tactic_instances")
+        .select(`
+          id, status, due_date, title,
+          tactics ( id, title, weight )
+        `)
+        .eq("org_id", context.orgId)
+        .eq("week_start", weekStart)
+        .eq("planned", true);
+
+      if (error) throw error;
+
+      const instances = (currentInstances || []) as any[];
+      const pendingInstances = instances.filter(i => i.status === 'pending');
+
+      if (pendingInstances.length === 0) {
+        return {
+          success: true,
+          data: {
+            message: "No pending tasks to adjust. You're all set!",
+            suggestions: []
+          }
+        };
+      }
+
+      const suggestions: string[] = [];
+      const highImpactTasks: any[] = [];
+      const lowImpactTasks: any[] = [];
+      const overdueTasks: any[] = [];
+
+      // 2. Categorize tasks
+      pendingInstances.forEach(i => {
+        const weight = i.tactics?.weight || 1.0;
+        const title = i.tactics?.title || "Unknown Task";
+        
+        if (i.due_date < today) {
+          overdueTasks.push({ title, id: i.id, weight });
+        }
+
+        if (weight >= 0.8) {
+          highImpactTasks.push({ title, id: i.id, weight });
+        } else if (weight <= 0.3) {
+          lowImpactTasks.push({ title, id: i.id, weight });
+        }
+      });
+
+      // 3. Generate Suggestions
+
+      // A. Overdue Management
+      if (overdueTasks.length > 0) {
+        const titles = overdueTasks.map(t => `"${t.title}"`).join(", ");
+        suggestions.push(
+          `You have ${overdueTasks.length} overdue tasks (${titles}). Consider rescheduling them to a specific day later this week or deferring them if they are no longer critical.`
+        );
+      }
+
+      // B. High Impact Focus
+      if (highImpactTasks.length > 0) {
+        const topTask = highImpactTasks.sort((a, b) => b.weight - a.weight)[0];
+        suggestions.push(
+          `Prioritize "${topTask.title}" (Weight: ${topTask.weight}). Completing this single item will significantly boost your score.`
+        );
+      }
+
+      // C. Load Shedding (Low Impact)
+      if (lowImpactTasks.length > 0 && pendingInstances.length > 5) {
+        const lowTask = lowImpactTasks[0];
+        suggestions.push(
+          `If you're feeling overwhelmed, consider deferring "${lowTask.title}" (Weight: ${lowTask.weight}) to next week. It has a lower impact on your weekly score.`
+        );
+      }
+
+      // D. General Volume
+      if (pendingInstances.length > 10) {
+        suggestions.push(
+          `You have ${pendingInstances.length} items remaining. This is a high volume. Review your plan and ensure it's realistic.`
+        );
+      }
+
+      if (suggestions.length === 0) {
+        suggestions.push("Your plan looks balanced. Keep executing!");
+      }
+
+      return {
+        success: true,
+        data: {
+          message: "Here are some suggestions to optimize your week:",
+          suggestions,
+          analysis: {
+            pending_count: pendingInstances.length,
+            overdue_count: overdueTasks.length,
+            high_impact_count: highImpactTasks.length
+          }
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to generate suggestions"
+      };
+    }
+  }
+};
+
 // Export all analysis tools
 export const analysisTools = [
   explainStatusTool,
   compareCyclesTool,
   findBlockersTool,
   analyzeLagLeadCorrelationTool,
+  predictScoreTool,
+  suggestAdjustmentsTool,
 ];
