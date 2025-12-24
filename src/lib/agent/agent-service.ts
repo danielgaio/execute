@@ -4,7 +4,7 @@
  */
 
 import type OpenAI from "openai";
-import { createChatCompletion } from "../openai";
+import { createChatCompletion, createStreamingChatCompletion } from "../openai";
 import type { AgentTool, ToolContext, ToolResult } from "./types";
 import { toolToOpenAIFunction } from "./types";
 import { queryTools } from "./tools/query-tools";
@@ -91,8 +91,10 @@ export class AgentService {
     maxIterations?: number;
     confirmedToolCallId?: string;
     cancelledToolCallId?: string;
+    stream?: boolean;
   }): Promise<{
-    message: string;
+    message?: string;
+    stream?: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
     toolCalls?: {
       name: string;
       args: Record<string, unknown>;
@@ -106,7 +108,7 @@ export class AgentService {
       args: Record<string, unknown>;
     };
   }> {
-    const { messages, context, maxIterations = 5, confirmedToolCallId, cancelledToolCallId } = params;
+    const { messages, context, maxIterations = 5, confirmedToolCallId, cancelledToolCallId, stream = false } = params;
 
     // Retrieve relevant context using RAG
     let contextMessage = "";
@@ -281,6 +283,22 @@ ${relevantDocs
 
       // If no tool calls, return the message
       if (!message.tool_calls || message.tool_calls.length === 0) {
+        // If streaming is requested, we need to re-generate this final response as a stream
+        if (stream) {
+          const streamResponse = await createStreamingChatCompletion({
+            messages: currentMessages,
+            tools: this.getToolDefinitions(),
+            toolChoice: "auto",
+          });
+          
+          return {
+            stream: streamResponse,
+            toolCalls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
+            generatedMessages,
+            rawResponse: response,
+          };
+        }
+
         return {
           message:
             message.content ||

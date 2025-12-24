@@ -110,31 +110,97 @@ export function useAgentChat() {
         }),
       });
 
-      const data = await response.json();
+      const contentType = response.headers.get("Content-Type");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send message");
+      // Handle Standard JSON Response (Errors, Confirmations, Non-streaming)
+      if (contentType?.includes("application/json")) {
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to send message");
+        }
+
+        if (data.conversationId) setConversationId(data.conversationId);
+        if (data.confirmationRequired) setConfirmationRequest(data.confirmationRequired);
+
+        const assistantMessage: Message = {
+          role: "assistant",
+          content: data.message,
+          timestamp: new Date(),
+          toolCalls: data.toolCalls,
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        if (data.toolCalls) handleMutatingActions(data.toolCalls);
+        return;
       }
 
-      if (data.conversationId) {
-        setConversationId(data.conversationId);
-      }
+      // Handle Streaming Response
+      if (!response.body) throw new Error("No response body");
 
-      if (data.confirmationRequired) {
-        setConfirmationRequest(data.confirmationRequired);
-      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let isMetadataParsed = false;
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.message,
-        timestamp: new Date(),
-        toolCalls: data.toolCalls,
-      };
+      // Add placeholder assistant message
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        },
+      ]);
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      if (data.toolCalls) {
-        handleMutatingActions(data.toolCalls);
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse Metadata (First Line)
+        if (!isMetadataParsed) {
+          const newlineIndex = buffer.indexOf("\n");
+          if (newlineIndex !== -1) {
+            const metadataLine = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1); // Remaining is content
+
+            try {
+              const metadata = JSON.parse(metadataLine);
+              
+              if (metadata.conversationId) setConversationId(metadata.conversationId);
+              if (metadata.confirmationRequired) setConfirmationRequest(metadata.confirmationRequired);
+              if (metadata.toolCalls) handleMutatingActions(metadata.toolCalls);
+
+              // Update message with metadata (toolCalls)
+              setMessages((prev) => {
+                const newArr = [...prev];
+                const lastMsg = newArr[newArr.length - 1];
+                lastMsg.toolCalls = metadata.toolCalls;
+                return newArr;
+              });
+
+              isMetadataParsed = true;
+            } catch (e) {
+              console.error("Failed to parse metadata:", e);
+            }
+          }
+        }
+
+        // Append Content
+        if (isMetadataParsed && buffer) {
+          const textChunk = buffer;
+          buffer = ""; // Clear buffer
+
+          setMessages((prev) => {
+            const newArr = [...prev];
+            const lastMsg = newArr[newArr.length - 1];
+            lastMsg.content += textChunk;
+            return newArr;
+          });
+        }
       }
 
     } catch (err) {

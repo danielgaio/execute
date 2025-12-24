@@ -24,7 +24,7 @@
 - [x] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
 - [x] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
-- [ ] Implement streaming responses for agent chat to improve perceived performance
+- [x] Implement streaming responses for agent chat to improve perceived performance
 
 ### 3. Database Foundation & Multi-Tenant Security
 

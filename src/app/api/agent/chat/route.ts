@@ -137,14 +137,67 @@ export async function POST(request: NextRequest) {
       },
       confirmedToolCallId,
       cancelledToolCallId,
+      stream: true, // Enable streaming
     });
 
     // 4. Save generated messages (Assistant response + Tool calls)
+    // Note: If streaming, result.generatedMessages contains tool calls and intermediate steps,
+    // but NOT the final streaming content.
     for (const msg of result.generatedMessages) {
       await conversationService.addMessage(supabase, conversationId!, msg);
     }
 
-    // Return response
+    // Handle Streaming Response
+    if (result.stream) {
+      const encoder = new TextEncoder();
+      
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            // 1. Send Metadata (JSON + Newline)
+            const metadata = {
+              conversationId,
+              toolCalls: result.toolCalls,
+              confirmationRequired: result.confirmationRequired,
+            };
+            controller.enqueue(encoder.encode(JSON.stringify(metadata) + "\n"));
+
+            // 2. Stream Content
+            let fullContent = "";
+            
+            for await (const chunk of result.stream!) {
+              const content = chunk.choices[0]?.delta?.content || "";
+              if (content) {
+                fullContent += content;
+                controller.enqueue(encoder.encode(content));
+              }
+            }
+
+            // 3. Save final message to DB
+            if (fullContent) {
+              await conversationService.addMessage(supabase, conversationId!, {
+                role: "assistant",
+                content: fullContent,
+              });
+            }
+          } catch (err) {
+            console.error("Streaming error:", err);
+            controller.error(err);
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new NextResponse(stream, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
+
+    // Return standard JSON response (e.g. for confirmations or errors)
     return NextResponse.json({
       message: result.message,
       toolCalls: result.toolCalls,
