@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { getWeekStart } from "@/utils/planning";
 
 export interface Tactic {
   id: string;
@@ -15,6 +16,97 @@ export interface TacticInstance {
   due_date: string;
   planned: boolean;
   status: "pending" | "done" | "skipped" | "deferred";
+}
+
+/**
+ * Generates weekly plans and tactic instances for all active cycles.
+ * Designed to be run by a cron job (e.g., every Monday).
+ */
+export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
+  // 1. Get all active cycles
+  const { data: cycles, error: cycleError } = await supabase
+    .from("cycles")
+    .select("id, org_id, start_date, end_date, owner_user_id")
+    .eq("status", "active");
+
+  if (cycleError || !cycles) {
+    console.error("Error fetching cycles:", cycleError);
+    return { generated: 0, errors: [cycleError] };
+  }
+
+  const results = { generated: 0, errors: [] as any[] };
+  const today = new Date();
+  const currentWeekStart = getWeekStart(today); // Monday of current week
+  const currentWeekStartStr = currentWeekStart.toISOString().split("T")[0];
+
+  for (const cycle of cycles) {
+    try {
+      // Check if cycle is currently active (date-wise)
+      const cycleStart = new Date(cycle.start_date);
+      const cycleEnd = new Date(cycle.end_date);
+      
+      // Simple check: is the current week start within the cycle range?
+      // Or does the cycle overlap with this week?
+      // Let's be permissive: if cycle is active status, and dates overlap.
+      if (currentWeekStart > cycleEnd) {
+        continue; // Cycle ended
+      }
+      // If cycle starts in future, we might still want to generate the first week plan if it's close?
+      // Let's stick to: if currentWeekStart >= cycleStart (or close enough)
+      // For now, strict check:
+      if (currentWeekStart < cycleStart) {
+        // If it starts mid-week, we might want to generate.
+        // Let's check if the week *contains* any cycle days.
+        const currentWeekEnd = new Date(currentWeekStart);
+        currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
+        if (currentWeekEnd < cycleStart) {
+            continue; // Week is entirely before cycle
+        }
+      }
+
+      // 2. Create Weekly Plan Record (if not exists)
+      const { data: existingPlan } = await supabase
+        .from("weekly_plans")
+        .select("id")
+        .eq("cycle_id", cycle.id)
+        .eq("week_start", currentWeekStartStr)
+        .single();
+
+      if (!existingPlan) {
+        const { error: planError } = await supabase.from("weekly_plans").insert({
+          cycle_id: cycle.id,
+          org_id: cycle.org_id,
+          week_start: currentWeekStartStr,
+          owner_user_id: cycle.owner_user_id,
+          status: "draft",
+        });
+        if (planError) throw planError;
+      }
+
+      // 3. Get all active tactics for this cycle
+      // We need to join goals to filter by cycle_id
+      const { data: tactics, error: tacticsError } = await supabase
+        .from("tactics")
+        .select("*, goals!inner(cycle_id)")
+        .eq("goals.cycle_id", cycle.id)
+        .eq("status", "active");
+
+      if (tacticsError) throw tacticsError;
+
+      if (tactics) {
+        for (const tactic of tactics) {
+          // Cast to Tactic interface if needed, or ensure query returns compatible shape
+          // TODO: Handle 'custom' recurrence pattern when implemented
+           await generateInstancesForTactic(supabase, tactic as any, currentWeekStart);
+        }
+      }
+      results.generated++;
+    } catch (e) {
+      console.error(`Error processing cycle ${cycle.id}:`, e);
+      results.errors.push({ cycleId: cycle.id, error: e });
+    }
+  }
+  return results;
 }
 
 /**
