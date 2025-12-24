@@ -13,6 +13,7 @@ import { analysisTools } from "./tools/analysis-tools";
 import { planningTools } from "./tools/planning-tools";
 import { wprTools } from "./tools/wpr-tools";
 import { executionTools } from "./tools/execution-tools";
+import { teamTools } from "./tools/team-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 import { logAgentAction } from "./audit-service";
@@ -33,7 +34,15 @@ export class AgentService {
    * Register all available tools
    */
   private registerTools(): void {
-    const allTools = [...queryTools, ...actionTools, ...analysisTools, ...planningTools, ...wprTools, ...executionTools];
+    const allTools = [
+      ...queryTools,
+      ...actionTools,
+      ...analysisTools,
+      ...planningTools,
+      ...wprTools,
+      ...executionTools,
+      ...teamTools,
+    ];
 
     for (const tool of allTools) {
       this.tools.set(tool.name, tool);
@@ -108,13 +117,26 @@ export class AgentService {
       args: Record<string, unknown>;
     };
   }> {
-    const { messages, context, maxIterations = 5, confirmedToolCallId, cancelledToolCallId, stream = false } = params;
+    const {
+      messages,
+      context,
+      maxIterations = 5,
+      confirmedToolCallId,
+      cancelledToolCallId,
+      stream = false,
+    } = params;
 
     // Retrieve relevant context using RAG
     let contextMessage = "";
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((m) => m.role === "user");
 
-    if (context.orgId && lastUserMessage && typeof lastUserMessage.content === "string") {
+    if (
+      context.orgId &&
+      lastUserMessage &&
+      typeof lastUserMessage.content === "string"
+    ) {
       // 1. Build Deterministic Context (Cycle, Score, Tasks)
       try {
         const deterministicContext = await contextBuilder.buildContext(
@@ -138,7 +160,12 @@ export class AgentService {
           contextMessage += `
 \n--- RELEVANT PLANS & NOTES ---\n
 ${relevantDocs
-  .map((doc) => `[${doc.metadata.entity_type.toUpperCase()}] ${doc.metadata.title || "Untitled"}\n${doc.content}`)
+  .map(
+    (doc) =>
+      `[${doc.metadata.entity_type.toUpperCase()}] ${
+        doc.metadata.title || "Untitled"
+      }\n${doc.content}`
+  )
   .join("\n\n")}
 `;
         }
@@ -164,35 +191,40 @@ ${relevantDocs
 
     // RESUME LOGIC: Check if we are resuming from a tool call
     const lastMessage = messages[messages.length - 1];
-    if (lastMessage?.role === 'assistant' && lastMessage.tool_calls?.length) {
+    if (lastMessage?.role === "assistant" && lastMessage.tool_calls?.length) {
       const toolResults: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-      
+
       for (const toolCall of lastMessage.tool_calls) {
-        if (toolCall.type !== 'function') continue;
+        if (toolCall.type !== "function") continue;
 
         const toolName = toolCall.function.name;
         const toolArgs = JSON.parse(toolCall.function.arguments);
         const tool = this.tools.get(toolName);
-        
+
         // Check confirmation
         if (tool?.requiresConfirmation) {
           // Handle Cancellation
           if (toolCall.id === cancelledToolCallId) {
-            const result = { success: false, error: "User cancelled this action." };
-            
+            const result = {
+              success: false,
+              error: "User cancelled this action.",
+            };
+
             // Log cancellation
             if (context.orgId) {
               await logAgentAction(context.supabase, {
-                userId: (await context.supabase.auth.getUser()).data.user?.id || "unknown",
+                userId:
+                  (await context.supabase.auth.getUser()).data.user?.id ||
+                  "unknown",
                 orgId: context.orgId,
                 toolName,
                 action: "agent_tool_call",
                 entityType: "tool_execution",
                 entityId: toolCall.id,
-                metadata: { 
+                metadata: {
                   status: "cancelled",
-                  args: toolArgs
-                }
+                  args: toolArgs,
+                },
               });
             }
 
@@ -202,10 +234,10 @@ ${relevantDocs
               result,
             });
 
-            const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = { 
-              role: 'tool', 
-              tool_call_id: toolCall.id, 
-              content: JSON.stringify(result) 
+            const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = {
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result),
             };
             toolResults.push(toolMessage);
             generatedMessages.push(toolMessage);
@@ -216,35 +248,37 @@ ${relevantDocs
             // Not confirmed yet
             return {
               message: "Please confirm this action.",
-              generatedMessages: [], 
+              generatedMessages: [],
               confirmationRequired: {
                 toolCallId: toolCall.id,
                 name: toolName,
-                args: toolArgs
-              }
+                args: toolArgs,
+              },
             };
           }
 
           // Log confirmation
           if (context.orgId) {
             await logAgentAction(context.supabase, {
-              userId: (await context.supabase.auth.getUser()).data.user?.id || "unknown",
+              userId:
+                (await context.supabase.auth.getUser()).data.user?.id ||
+                "unknown",
               orgId: context.orgId,
               toolName,
               action: "agent_tool_call",
               entityType: "tool_execution",
               entityId: toolCall.id,
-              metadata: { 
+              metadata: {
                 status: "confirmed",
-                args: toolArgs
-              }
+                args: toolArgs,
+              },
             });
           }
         }
-        
+
         // Execute
         const result = await this.executeTool(toolName, toolArgs, context);
-        
+
         // Track tool call
         toolCallHistory.push({
           name: toolName,
@@ -252,15 +286,15 @@ ${relevantDocs
           result,
         });
 
-        const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = { 
-          role: 'tool', 
-          tool_call_id: toolCall.id, 
-          content: JSON.stringify(result) 
+        const toolMessage: OpenAI.Chat.ChatCompletionMessageParam = {
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
         };
         toolResults.push(toolMessage);
         generatedMessages.push(toolMessage);
       }
-      
+
       // Append results to currentMessages
       currentMessages = [...currentMessages, ...toolResults];
     }
@@ -291,7 +325,7 @@ ${relevantDocs
             // Avoid re-triggering tool calls during the streaming replay
             toolChoice: "none",
           });
-          
+
           return {
             stream: streamResponse,
             toolCalls: toolCallHistory.length > 0 ? toolCallHistory : undefined,
@@ -331,8 +365,8 @@ ${relevantDocs
             confirmationRequired: {
               toolCallId: toolCall.id,
               name: toolName,
-              args: toolArgs
-            }
+              args: toolArgs,
+            },
           };
         }
 
@@ -352,7 +386,7 @@ ${relevantDocs
           tool_call_id: toolCall.id,
           content: JSON.stringify(result),
         };
-        
+
         toolResults.push(toolMessage);
         generatedMessages.push(toolMessage);
       }
@@ -388,7 +422,8 @@ ${relevantDocs
       );
 
       if (!data.activeCycle) {
-        specificPrompt = "\n\n**I noticed you don't have an active 12-week cycle.**\nWould you like to create one now? I can help you define your vision and goals.";
+        specificPrompt =
+          "\n\n**I noticed you don't have an active 12-week cycle.**\nWould you like to create one now? I can help you define your vision and goals.";
       } else if (data.overdueTasksCount > 0) {
         specificPrompt = `\n\n**You have ${data.overdueTasksCount} overdue tasks.**\nShall we review them and get you back on track?`;
       } else if (data.todayTasksCount > 0) {

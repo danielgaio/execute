@@ -11,9 +11,13 @@ Agent-first productivity system for 12-week execution cycles, inspired by quarte
   - Daily focus recommendations
   - Weekly score analysis with explanations
   - Action execution with confirmation (mark complete, defer tasks)
+  - **NEW: Team management tools** (create teams, invite members, manage roles)
 - **Multi-Tenant Architecture** 🏢 - Organizations and teams with role-based access
   - Row-Level Security (RLS) for data isolation
   - Owner, Manager, Member, Viewer roles
+  - **NEW: Complete team management system** (see [docs/TEAMS.md](docs/TEAMS.md))
+  - **NEW: Email-based invitations** with secure tokens (7-day expiry)
+  - **NEW: Team & org member management UI** with agent assistance
 - **12-Week Cycles** 📅 - Plan and track execution in 12-week periods
   - Vision statements to guide strategic direction
   - Goals (lag indicators) for outcome metrics
@@ -48,6 +52,8 @@ Agent-first productivity system for 12-week execution cycles, inspired by quarte
 ## 📖 Documentation
 
 - [Agent Documentation](docs/AGENT.md) - AI Agent features and usage
+- **[Team Management Guide](docs/TEAMS.md)** - **NEW:** Organizations, teams, invitations, and roles
+- [Audit System](docs/AUDIT-SYSTEM.md) - Versioning and audit trail architecture
 - [SRS.md](SRS.md) - Complete software requirements specification
 - [TODO.md](TODO.md) - Implementation roadmap
 
@@ -90,9 +96,12 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 
 1. **Sign Up** - Create an account or use OAuth
 2. **Create Organization** - Set up your first organization
-3. **Talk to the Agent** - Click the AI button (bottom-right) and ask:
+3. **Invite Team Members** - Navigate to `/dashboard/teams` or ask the agent: "Invite sarah@example.com as a manager"
+4. **Talk to the Agent** - Click the AI button (bottom-right) and ask:
    - "Help me plan my first 12-week cycle"
-   - "What should I work on?"
+   - "Create an Engineering team and add John and Sarah"
+   - "What should I work on today?"
+   - "Show me my team members"
    - "Explain the Execute methodology"
 
 ## 🎯 Core Concepts
