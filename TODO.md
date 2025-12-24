@@ -31,6 +31,10 @@
 - [x] Write unit tests for Action Tools (Create/Update/Defer)
 - [x] Create advanced action tools: `update_tactic` (handles rescheduling and weight updates)
 - [x] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
+- [x] Enhance WPR tools with team-level breakdown and scoring ✅ **COMPLETED** (Dec 24, 2025)
+  - Updated `get_wpr_context` to calculate scores per team
+  - Added logic to attribute tactic instances to teams based on goal ownership or assignee
+  - Updated tests to verify team breakdown logic
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
 - [x] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
 - [x] Implement streaming responses for agent chat to improve perceived performance

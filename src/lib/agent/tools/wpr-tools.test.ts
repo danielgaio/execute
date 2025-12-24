@@ -49,17 +49,59 @@ describe("WPR Tools", () => {
     it("should return detailed context including deferred items and next week preview", async () => {
       // Mock Active Cycle
       const mockCycle = { id: "cycle-1", title: "Q1" };
-      
+
       // Mock Tactic Instances
-      // 1 Done, 1 Pending, 1 Deferred
+      // 1 Done (Team A), 1 Pending (Team B), 1 Deferred (Unassigned)
       const mockInstances = [
-        { id: "1", status: "done", planned: true, tactics: { title: "T1", weight: 1.0 } },
-        { id: "2", status: "pending", planned: true, tactics: { title: "T2", weight: 1.0 } },
-        { id: "3", status: "deferred", planned: true, tactics: { title: "T3", weight: 1.0 } },
+        {
+          id: "1",
+          status: "done",
+          planned: true,
+          tactics: {
+            title: "T1",
+            weight: 1.0,
+            assignee_user_id: "user-1",
+            goals: { team_id: "team-a" },
+          },
+        },
+        {
+          id: "2",
+          status: "pending",
+          planned: true,
+          tactics: {
+            title: "T2",
+            weight: 1.0,
+            assignee_user_id: "user-2",
+            goals: { team_id: "team-b" },
+          },
+        },
+        {
+          id: "3",
+          status: "deferred",
+          planned: true,
+          tactics: {
+            title: "T3",
+            weight: 1.0,
+            assignee_user_id: "user-3",
+            goals: { team_id: null },
+          },
+        },
       ];
-      
+
       // Mock Goals
       const mockGoals = [{ id: "g1", title: "Revenue" }];
+
+      // Mock Teams
+      const mockTeams = [
+        { id: "team-a", name: "Team A" },
+        { id: "team-b", name: "Team B" },
+      ];
+
+      // Mock Team Members
+      const mockTeamMembers = [
+        { team_id: "team-a", user_id: "user-1" },
+        { team_id: "team-b", user_id: "user-2" },
+      ];
 
       // Mock Next Week Count
       const mockNextWeekCount = { count: 5 };
@@ -70,33 +112,50 @@ describe("WPR Tools", () => {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: mockCycle, error: null })
+            single: vi.fn().mockResolvedValue({ data: mockCycle, error: null }),
           };
+        }
+        if (table === "teams") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            then: (resolve: any) => resolve({ data: mockTeams, error: null }),
+          } as any;
+        }
+        if (table === "team_members") {
+          return {
+            select: vi.fn().mockReturnThis(),
+            in: vi.fn().mockReturnThis(),
+            then: (resolve: any) =>
+              resolve({ data: mockTeamMembers, error: null }),
+          } as any;
         }
         if (table === "tactic_instances") {
           return {
             select: vi.fn().mockImplementation((sel) => {
-                if (sel === 'id') {
-                    return {
-                        eq: vi.fn().mockReturnThis(),
-                        then: (resolve: any) => resolve({ count: 5, error: null })
-                    };
-                }
+              if (sel === "id") {
                 return {
-                    eq: vi.fn().mockReturnThis(),
-                    then: (resolve: any) => resolve({ data: mockInstances, error: null })
+                  eq: vi.fn().mockReturnThis(),
+                  then: (resolve: any) => resolve({ count: 5, error: null }),
                 };
+              }
+              return {
+                eq: vi.fn().mockReturnThis(),
+                then: (resolve: any) =>
+                  resolve({ data: mockInstances, error: null }),
+              };
             }),
             eq: vi.fn().mockReturnThis(),
-            then: (resolve: any) => resolve({ data: mockInstances, error: null })
+            then: (resolve: any) =>
+              resolve({ data: mockInstances, error: null }),
           } as any;
         }
         if (table === "goals") {
-           return {
+          return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
-            then: (resolve: any) => resolve({ data: mockGoals, error: null })
-           } as any;
+            then: (resolve: any) => resolve({ data: mockGoals, error: null }),
+          } as any;
         }
         return mockSupabase;
       });
@@ -108,87 +167,125 @@ describe("WPR Tools", () => {
       expect(result.data.details.deferred).toHaveLength(1);
       expect(result.data.nextWeekPlan.status).toBe("generated");
       expect(result.data.nextWeekPlan.itemCount).toBe(5);
+
+      // Verify Team Breakdown
+      expect(result.data.teamBreakdown).toHaveLength(3);
+      const teamA = result.data.teamBreakdown.find(
+        (t: any) => t.name === "Team A"
+      );
+      const teamB = result.data.teamBreakdown.find(
+        (t: any) => t.name === "Team B"
+      );
+      const other = result.data.teamBreakdown.find(
+        (t: any) => t.name === "Other / Cross-Functional"
+      );
+
+      // Team A: 1 done / 1 total (100%)
+      expect(teamA).toBeDefined();
+      expect(teamA.score).toBe(100);
+
+      // Team B: 0 done / 1 total (0%)
+      expect(teamB).toBeDefined();
+      expect(teamB.score).toBe(0);
+
+      // Other: 1 deferred / 1 total (0%)
+      expect(other).toBeDefined();
+      expect(other.score).toBe(0);
     });
   });
 
   describe("submit_wpr", () => {
     it("should generate next week plan if commit_next_week is true", async () => {
       // Mock Active Cycle
-      mockSupabase.single.mockResolvedValue({ data: { id: "cycle-1" }, error: null });
+      mockSupabase.single.mockResolvedValue({
+        data: { id: "cycle-1" },
+        error: null,
+      });
 
       // Mock Instances (for score calc)
-      const mockInstances = [{ id: "1", status: "done", planned: true, tactics: { weight: 1.0 } }];
-      
+      const mockInstances = [
+        { id: "1", status: "done", planned: true, tactics: { weight: 1.0 } },
+      ];
+
       // Mock Existing WPR (null = create)
       // The tool calls single() for WPR check.
       // 1. Cycle (single)
       // 2. Instances (select)
       // 3. WPR Check (single) -> return null
       // 4. Insert WPR (single) -> return new WPR
-      
+
       // Mock Tactics (for next week generation)
       const mockTactics = [{ id: "t1" }, { id: "t2" }];
 
       // Mock Next Week Check (count) -> return 0 (not generated)
-      
+
       let callCount = 0;
       mockSupabase.single.mockImplementation(() => {
         callCount++;
-        if (callCount === 1) return Promise.resolve({ data: { id: "cycle-1" }, error: null }); // Cycle
-        if (callCount === 2) return Promise.resolve({ data: null, error: null }); // WPR Check
-        if (callCount === 3) return Promise.resolve({ data: { id: "wpr-1" }, error: null }); // WPR Insert
+        if (callCount === 1)
+          return Promise.resolve({ data: { id: "cycle-1" }, error: null }); // Cycle
+        if (callCount === 2)
+          return Promise.resolve({ data: null, error: null }); // WPR Check
+        if (callCount === 3)
+          return Promise.resolve({ data: { id: "wpr-1" }, error: null }); // WPR Insert
         return Promise.resolve({ data: null });
       });
 
       const selectMock = vi.fn().mockReturnThis();
       // Handle instances fetch
-      (selectMock as any).then = (resolve: any) => resolve({ data: mockInstances, error: null });
+      (selectMock as any).then = (resolve: any) =>
+        resolve({ data: mockInstances, error: null });
 
       mockSupabase.select.mockImplementation((...args: any[]) => {
-          const sel = args[0];
-          if (sel === 'id' && typeof args[1] === 'object') {
-              // Count query for next week check
-              const chain = {
-                  eq: vi.fn(),
-                  then: (resolve: any) => resolve({ count: 0, error: null })
-              };
-              chain.eq.mockReturnValue(chain);
-              return chain;
-          }
-          if (sel === 'id' && !args[1]) {
-             // Tactics fetch OR Cycle fetch
-             const chain = {
-                 eq: vi.fn(),
-                 single: (...args: any[]) => mockSupabase.single(...args),
-                 then: (resolve: any) => resolve({ data: mockTactics, error: null })
-             };
-             chain.eq.mockReturnValue(chain);
-             return chain;
-          }
-          
-          // Default (Cycle, Instances, WPR Check)
+        const sel = args[0];
+        if (sel === "id" && typeof args[1] === "object") {
+          // Count query for next week check
           const chain = {
-              eq: vi.fn(),
-              single: (...args: any[]) => mockSupabase.single(...args),
-              then: (resolve: any) => resolve({ data: mockInstances, error: null })
+            eq: vi.fn(),
+            then: (resolve: any) => resolve({ count: 0, error: null }),
           };
           chain.eq.mockReturnValue(chain);
           return chain;
+        }
+        if (sel === "id" && !args[1]) {
+          // Tactics fetch OR Cycle fetch
+          const chain = {
+            eq: vi.fn(),
+            single: (...args: any[]) => mockSupabase.single(...args),
+            then: (resolve: any) => resolve({ data: mockTactics, error: null }),
+          };
+          chain.eq.mockReturnValue(chain);
+          return chain;
+        }
+
+        // Default (Cycle, Instances, WPR Check)
+        const chain = {
+          eq: vi.fn(),
+          single: (...args: any[]) => mockSupabase.single(...args),
+          then: (resolve: any) => resolve({ data: mockInstances, error: null }),
+        };
+        chain.eq.mockReturnValue(chain);
+        return chain;
       });
 
-      const result = await submitWPRTool.handler({
-        week_start: "2025-01-01",
-        notes: "Good week",
-        lag_status: "On track",
-        commit_next_week: true
-      }, mockContext);
+      const result = await submitWPRTool.handler(
+        {
+          week_start: "2025-01-01",
+          notes: "Good week",
+          lag_status: "On track",
+          commit_next_week: true,
+        },
+        mockContext
+      );
 
       if (!result.success) {
         console.error("Test Failure Error:", result.error);
       }
 
       expect(result.success).toBe(true);
-      expect(planningDomain.generateInstancesForTacticId).toHaveBeenCalledTimes(2); // Once for each tactic
+      expect(planningDomain.generateInstancesForTacticId).toHaveBeenCalledTimes(
+        2
+      ); // Once for each tactic
       expect(result.data.message).toContain("Generated plan for next week");
     });
   });

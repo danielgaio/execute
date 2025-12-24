@@ -62,12 +62,29 @@ export const getWPRContextTool: AgentTool = {
         .select(
           `
           id, status, planned, due_date, notes,
-          tactics ( id, title, weight, goal_id )
+          tactics (
+            id, title, weight, goal_id, assignee_user_id,
+            goals ( team_id )
+          )
         `
         )
         .eq("org_id", context.orgId)
         .eq("week_start", weekStart)
         .eq("planned", true);
+
+      // 2b. Get Teams and Members for Breakdown
+      const { data: teams } = await context.supabase
+        .from("teams")
+        .select("id, name")
+        .eq("org_id", context.orgId);
+
+      const { data: teamMembers } = await context.supabase
+        .from("team_members")
+        .select("team_id, user_id")
+        .in(
+          "team_id",
+          (teams || []).map((t) => t.id)
+        );
 
       // 3. Calculate Lead Score using Domain Logic
       const scorableItems: ScorableItem[] = (instances || []).map(
@@ -81,6 +98,81 @@ export const getWPRContextTool: AgentTool = {
 
       const leadScore = calculateLeadScore(scorableItems);
       const performance = getPerformanceStatus(leadScore);
+
+      // 3b. Calculate Team Breakdown
+      const teamStats: Record<
+        string,
+        {
+          name: string;
+          total: number;
+          completed: number;
+          items: ScorableItem[];
+        }
+      > = {};
+
+      // Initialize team stats
+      teams?.forEach((t) => {
+        teamStats[t.id] = {
+          name: t.name,
+          total: 0,
+          completed: 0,
+          items: [],
+        };
+      });
+      // Add "Unassigned/Cross-Functional" bucket
+      teamStats["other"] = {
+        name: "Other / Cross-Functional",
+        total: 0,
+        completed: 0,
+        items: [],
+      };
+
+      // Map instances to teams
+      (instances || []).forEach((inst: any) => {
+        const tactic = inst.tactics;
+        const goal = tactic?.goals;
+        const assigneeId = tactic?.assignee_user_id;
+
+        let teamId = "other";
+
+        // Priority 1: Goal's Team
+        if (goal?.team_id && teamStats[goal.team_id]) {
+          teamId = goal.team_id;
+        }
+        // Priority 2: Assignee's Team (if unique)
+        else if (assigneeId) {
+          const userTeams = teamMembers
+            ?.filter((tm) => tm.user_id === assigneeId)
+            .map((tm) => tm.team_id);
+
+          if (userTeams && userTeams.length === 1 && teamStats[userTeams[0]]) {
+            teamId = userTeams[0];
+          }
+        }
+
+        // Add to stats
+        teamStats[teamId].items.push({
+          id: inst.id,
+          status: inst.status,
+          weight: tactic?.weight || 1.0,
+          planned: inst.planned,
+        });
+      });
+
+      // Calculate scores per team
+      const teamBreakdown = Object.values(teamStats)
+        .filter((t) => t.items.length > 0)
+        .map((t) => {
+          const score = calculateLeadScore(t.items);
+          return {
+            name: t.name,
+            score,
+            performance: getPerformanceStatus(score),
+            totalItems: t.items.length,
+            completedItems: t.items.filter((i) => i.status === "done").length,
+          };
+        })
+        .sort((a, b) => b.score - a.score); // Sort by score descending
 
       // Group items for the agent
       const completed = (instances || []).filter(
@@ -164,6 +256,7 @@ export const getWPRContextTool: AgentTool = {
             skipped: skipped.length,
             completionRate: `${leadScore}%`,
           },
+          teamBreakdown,
           details: {
             completed: completed.map((i: any) => ({
               title: i.tactics.title,
@@ -189,7 +282,11 @@ export const getWPRContextTool: AgentTool = {
             status: nextWeekCount && nextWeekCount > 0 ? "generated" : "empty",
             itemCount: nextWeekCount || 0,
           },
-          message: `WPR Context loaded. Score: ${leadScore}% (${performance}). ${pending.length} pending items to review.`,
+          message: `WPR Context loaded. Score: ${leadScore}% (${performance}). ${
+            pending.length
+          } pending items. Teams: ${teamBreakdown
+            .map((t) => `${t.name}: ${t.score}%`)
+            .join(", ")}.`,
         },
       };
     } catch (error: any) {
@@ -256,9 +353,9 @@ export const submitWPRTool: AgentTool = {
             .select();
 
         if (pendingError) throw pendingError;
-        
+
         if (pendingItems && pendingItems.length > 0) {
-            pendingMessage = ` Updated ${pendingItems.length} pending items to '${status}'.`;
+          pendingMessage = ` Updated ${pendingItems.length} pending items to '${status}'.`;
         }
       }
 
