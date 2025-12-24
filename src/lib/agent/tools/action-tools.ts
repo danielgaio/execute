@@ -8,6 +8,7 @@ import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { embeddingService } from "../embedding-service";
 import { logAgentAction, captureEntityState } from "../audit-service";
 import { generateTacticInstancesForWeek, getWeekStart } from "@/utils/planning";
+import { deferInstance, skipInstance } from "@/lib/domain/execution";
 
 /**
  * Create a new 12-week cycle
@@ -356,42 +357,13 @@ export const deferTacticTool: AgentTool = {
 
       if (!beforeState) throw new Error("Instance not found");
 
-      // 1. Calculate new dates (Next Week)
-      const currentDueDate = new Date(beforeState.due_date);
-      const nextDueDate = new Date(currentDueDate);
-      nextDueDate.setDate(nextDueDate.getDate() + 7);
-      
-      const currentWeekStart = new Date(beforeState.week_start);
-      const nextWeekStart = new Date(currentWeekStart);
-      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
-
-      // 2. Create new instance for next week
-      const { error: insertError } = await context.supabase
-        .from("tactic_instances")
-        .insert({
-          tactic_id: beforeState.tactic_id,
-          org_id: context.orgId,
-          week_start: nextWeekStart.toISOString().split('T')[0],
-          due_date: nextDueDate.toISOString().split('T')[0],
-          planned: true,
-          status: "pending",
-          notes: "Deferred from previous week"
-        });
-
-      if (insertError) throw insertError;
-
-      // 3. Mark old instance as deferred
-      const { error } = await context.supabase
-        .from("tactic_instances")
-        .update({
-          status: "deferred",
-          notes: params.reason || "Deferred by agent",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", params.instance_id)
-        .eq("org_id", context.orgId);
-
-      if (error) throw error;
+      // Use domain logic
+      const result = await deferInstance(
+        context.supabase,
+        params.instance_id as string,
+        context.orgId!,
+        params.reason
+      );
 
       // Fetch updated instance
       const afterState = await captureEntityState(
@@ -413,14 +385,14 @@ export const deferTacticTool: AgentTool = {
         metadata: {
           confirmed: true,
           defer_reason: params.reason,
-          new_due_date: nextDueDate.toISOString().split('T')[0]
+          new_due_date: result.nextDueDate
         },
       });
 
       return {
         success: true,
         data: {
-          message: `Tactic deferred to next week (${nextDueDate.toISOString().split('T')[0]})`,
+          message: `Tactic deferred to next week (${result.nextDueDate})`,
         },
       };
     } catch (error) {
@@ -431,6 +403,76 @@ export const deferTacticTool: AgentTool = {
       };
     }
   },
+};
+
+/**
+ * Bulk update tactic instances (e.g., for WPR cleanup)
+ */
+export const bulkUpdateTacticsTool: AgentTool = {
+  name: "bulk_update_tactics",
+  description: "Perform bulk actions on multiple tactic instances. Useful for cleaning up pending items during a Weekly Review (e.g., 'Defer all pending').",
+  category: "action",
+  requiresConfirmation: true,
+  parameters: z.object({
+    instance_ids: z.array(z.string()).describe("List of tactic instance IDs to update"),
+    action: z.enum(["defer", "skip", "complete"]).describe("Action to perform"),
+    reason: z.string().optional().describe("Reason for the action (e.g., 'WPR Cleanup')"),
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      const results = [];
+      const errors = [];
+
+      for (const id of params.instance_ids) {
+        try {
+          if (params.action === "defer") {
+            await deferInstance(context.supabase, id, context.orgId!, params.reason);
+            results.push(id);
+          } else if (params.action === "skip") {
+            await skipInstance(context.supabase, id, context.orgId!, params.reason);
+            results.push(id);
+          } else if (params.action === "complete") {
+             // Reuse existing logic or simple update
+             await context.supabase
+               .from("tactic_instances")
+               .update({ status: "done", notes: params.reason, updated_at: new Date().toISOString() })
+               .eq("id", id)
+               .eq("org_id", context.orgId!);
+             results.push(id);
+          }
+        } catch (e: any) {
+          errors.push({ id, error: e.message });
+        }
+      }
+
+      // Log summary action
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "bulk_update_tactics",
+        action: "update",
+        entityType: "tactic_instance", // Generic
+        entityId: "bulk",
+        details: {
+          action: params.action,
+          count: results.length,
+          ids: results,
+          errors
+        }
+      });
+
+      return {
+        success: true,
+        data: {
+          processed: results.length,
+          failed: errors.length,
+          message: `Successfully processed ${results.length} items. ${errors.length > 0 ? `${errors.length} failed.` : ""}`
+        }
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
 };
 
 /**
@@ -620,6 +662,7 @@ export const actionTools = [
   createTacticTool,
   markTacticCompleteTool,
   deferTacticTool,
+  bulkUpdateTacticsTool,
   updateTacticTool,
   createVisionTool,
 ];

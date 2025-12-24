@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool, updateTacticTool } from "./action-tools";
+import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool, updateTacticTool, bulkUpdateTacticsTool } from "./action-tools";
 import * as auditService from "../audit-service";
 import * as embeddingService from "../embedding-service";
 import * as planningUtils from "@/utils/planning";
+import * as executionDomain from "@/lib/domain/execution";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 // Mock dependencies
@@ -28,12 +29,19 @@ vi.mock("../embedding-service", () => ({
     indexCycle: vi.fn(),
     indexGoal: vi.fn(),
     indexTactic: vi.fn(),
+    indexVision: vi.fn(),
   },
 }));
 
 vi.mock("@/utils/planning", () => ({
   generateTacticInstancesForWeek: vi.fn(),
   getWeekStart: vi.fn().mockReturnValue("2025-01-01"),
+}));
+
+// Mock the domain layer
+vi.mock("@/lib/domain/execution", () => ({
+  deferInstance: vi.fn(),
+  skipInstance: vi.fn(),
 }));
 
 describe("Action Tools", () => {
@@ -64,44 +72,6 @@ describe("Action Tools", () => {
     };
 
     vi.clearAllMocks();
-  });
-
-  describe("defer_tactic", () => {
-    it("should defer the instance AND create a new one for next week", async () => {
-      const instanceId = "inst-1";
-      const tacticId = "tac-1";
-      const currentDueDate = "2025-01-01"; // Wednesday
-      const nextDueDate = "2025-01-08"; // Next Wednesday
-
-      // Mock fetching the instance to be deferred
-      // captureEntityState is mocked, so we don't need to mock supabase select for it.
-
-      // Mock update and insert to return success
-      // Since we use a shared mockChain, we don't need to do anything special 
-      // as long as the chain resolves to { error: null } which is the default.
-
-      const result = await deferTacticTool.handler({ instance_id: instanceId }, mockContext);
-
-      if (!result.success) {
-        console.error("Tool failed with error:", result.error);
-      }
-
-      expect(result.success).toBe(true);
-
-      // Verify Update (Old Instance)
-      expect(mockSupabase.from).toHaveBeenCalledWith("tactic_instances");
-      expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
-        status: "deferred"
-      }));
-
-      // Verify Insert (New Instance)
-      expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
-        tactic_id: tacticId,
-        due_date: nextDueDate,
-        planned: true,
-        status: "pending"
-      }));
-    });
   });
 
   describe("create_cycle", () => {
@@ -206,11 +176,6 @@ describe("Action Tools", () => {
   describe("mark_tactic_complete", () => {
     it("should update tactic instance and log action", async () => {
       const mockInstance = { id: "inst-1", status: "done", tactics: { title: "Task" } };
-      // First call for update returns error: null (update doesn't return data unless select is chained, but here we mock the flow)
-      // Actually the code does update().eq().eq(). Then select().eq().single()
-      
-      // We need to mock the chain for update separately from select if possible, or just make single return what we need
-      // The code: await context.supabase.from().update()...; if(error) throw; const {data} = await context.supabase.from().select()...
       
       // Mock update response (no error)
       mockSupabase.update.mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) });
@@ -237,9 +202,9 @@ describe("Action Tools", () => {
   });
 
   describe("defer_tactic", () => {
-    it("should defer tactic instance and log action", async () => {
-      // Mock update response
-      mockSupabase.update.mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) });
+    it("should defer tactic instance using domain logic", async () => {
+      // Mock domain response
+      (executionDomain.deferInstance as any).mockResolvedValue({ nextDueDate: "2025-01-08" });
 
       const result = await deferTacticTool.handler(
         { instance_id: "inst-1", reason: "Too busy" },
@@ -247,6 +212,12 @@ describe("Action Tools", () => {
       );
 
       expect(result.success).toBe(true);
+      expect(executionDomain.deferInstance).toHaveBeenCalledWith(
+        expect.anything(), // supabase
+        "inst-1",
+        "org-123",
+        "Too busy"
+      );
       expect(auditService.logAgentAction).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -289,6 +260,49 @@ describe("Action Tools", () => {
           metadata: expect.objectContaining({ confirmed: true }),
         })
       );
+    });
+  });
+
+  describe("bulk_update_tactics", () => {
+    it("should defer multiple instances", async () => {
+      (executionDomain.deferInstance as any).mockResolvedValue({ nextDueDate: "2025-01-08" });
+
+      const result = await bulkUpdateTacticsTool.handler(
+        { instance_ids: ["inst-1", "inst-2"], action: "defer", reason: "Bulk Defer" },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(executionDomain.deferInstance).toHaveBeenCalledTimes(2);
+      expect(executionDomain.deferInstance).toHaveBeenCalledWith(expect.anything(), "inst-1", "org-123", "Bulk Defer");
+      expect(executionDomain.deferInstance).toHaveBeenCalledWith(expect.anything(), "inst-2", "org-123", "Bulk Defer");
+      expect(result.data.processed).toBe(2);
+    });
+
+    it("should skip multiple instances", async () => {
+      (executionDomain.skipInstance as any).mockResolvedValue({ status: "skipped" });
+
+      const result = await bulkUpdateTacticsTool.handler(
+        { instance_ids: ["inst-3"], action: "skip", reason: "Not needed" },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(executionDomain.skipInstance).toHaveBeenCalledWith(expect.anything(), "inst-3", "org-123", "Not needed");
+    });
+
+    it("should complete multiple instances", async () => {
+       // Mock update for completion
+       mockSupabase.update.mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) }) });
+
+       const result = await bulkUpdateTacticsTool.handler(
+         { instance_ids: ["inst-4"], action: "complete", reason: "Done all" },
+         mockContext
+       );
+
+       expect(result.success).toBe(true);
+       expect(mockSupabase.from).toHaveBeenCalledWith("tactic_instances");
+       expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({ status: "done", notes: "Done all" }));
     });
   });
 });
