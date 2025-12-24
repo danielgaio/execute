@@ -10,6 +10,15 @@
 - [x] Implement agent chat UI as primary interface (persistent right-side panel, keyboard-accessible, mobile-responsive)
 - [x] Create conversation history storage with context window management and memory persistence
 - [x] Build agent context builder that assembles relevant cycles, goals, tactics, scores for each query
+- [x] Enrich agent context with team structure, member workload, and user-specific team memberships ✅ **COMPLETED** (Dec 24, 2025)
+  - Extended AgentContextData interface with team fields (teams, teamMembers, currentUserTeams)
+  - Implemented comprehensive team data fetching in buildContext method
+  - Added workload statistics calculation (assigned, completed, pending tasks per member)
+  - Updated formatContext to display team information in system prompt
+  - Integrated userId parameter for user-specific team context
+  - Added unit tests for team context functionality (3/3 tests passing)
+  - Updated agent-service.ts to pass userId when building context
+  - Documentation: docs/AGENT.md updated with context builder details
 
 ### 2. Agent-Assisted Planning & Execution Tools
 
@@ -52,9 +61,25 @@
 
 ### 5. Organization & Team Management
 
+- [x] Build team management backend services (teams.ts domain service) ✅ **COMPLETED** (Dec 23, 2025)
+  - Implemented createTeam, addTeamMember, removeTeamMember, updateMemberRole
+  - Implemented listTeams, listTeamMembers, listOrgMembers with proper RLS filtering
+  - Added last manager/owner protection to prevent orphaned teams/orgs
+  - Comprehensive unit tests (9/9 passing) with edge case coverage
+  - Documentation: Detailed inline comments and test descriptions
+- [x] Create agent team management tools ✅ **COMPLETED** (Dec 23, 2025)
+  - Implemented 7 team tools: create_team, add_team_member, remove_team_member, update_team_member_role, update_org_member_role, list_team_members, list_org_members
+  - All tools RLS-aware with proper authorization checks
+  - Integrated with audit logging system
+  - Write operations require confirmation
+  - Updated agent system prompt with team management capabilities
+- [x] Build navigation and settings UI for teams ✅ **COMPLETED** (Dec 23, 2025)
+  - Added Teams link to dashboard navigation
+  - Created Organization Members management page
+  - Created Invitations management page
+  - Material UI-based design consistent with dashboard
 - [ ] Build org creation and invitation flow (Owner role) - support both traditional UI and agent-assisted creation
-- [ ] Implement team creation and member assignment UI with agent suggestions based on skill matching
-- [ ] Create role management interface (Owner, Manager, Member, Viewer)
+- [ ] Implement team creation UI (forms for team details and member assignment)
 - [ ] Add user profile settings (timezone, locale, notification preferences)
 
 ### 6. Agent-Enhanced Planning Experience

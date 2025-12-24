@@ -141,7 +141,8 @@ export class AgentService {
       try {
         const deterministicContext = await contextBuilder.buildContext(
           context.supabase,
-          context.orgId
+          context.orgId,
+          context.userId
         );
         contextMessage += contextBuilder.formatContext(deterministicContext);
       } catch (error) {
@@ -418,7 +419,8 @@ ${relevantDocs
       // Build context to understand the user's state
       const data = await contextBuilder.buildContext(
         context.supabase,
-        context.orgId!
+        context.orgId!,
+        context.userId
       );
 
       if (!data.activeCycle) {

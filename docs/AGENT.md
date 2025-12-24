@@ -52,6 +52,34 @@ The Execute AI Agent is the primary interface for interacting with the Execute 1
 
 ## Architecture
 
+### Context Builder
+
+The Agent Context Builder (`src/lib/agent/context-builder.ts`) assembles comprehensive organizational state for each agent query:
+
+- **Cycle Information**: Active cycle title, end date, days remaining
+- **Vision**: Strategic vision (parsed or raw markdown)
+- **Goals**: Active goals with status and progress
+- **Weekly Score**: Current week's lead score with breakdown
+- **Task Counts**: Pending, today's, and overdue task counts
+- **Team Structure** (when userId provided):
+  - All teams in organization with member counts
+  - Detailed member workload (assigned, completed, pending tasks)
+  - User-specific team memberships
+- **Recent Activity**: Last 5 audit log entries
+
+**Usage:**
+
+```typescript
+// Basic context (no team data)
+const context = await contextBuilder.buildContext(supabase, orgId);
+
+// User-specific context (includes team data)
+const context = await contextBuilder.buildContext(supabase, orgId, userId);
+
+// Format as system prompt
+const prompt = contextBuilder.formatContext(context);
+```
+
 ### Components
 
 - **AgentService** (`src/lib/agent/agent-service.ts`)
