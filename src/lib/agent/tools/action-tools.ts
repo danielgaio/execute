@@ -175,9 +175,17 @@ export const createTacticTool: AgentTool = {
       .optional()
       .describe("Weight of the tactic (0.1 to 1.0, default: 1.0)"),
     recurrence: z
-      .enum(["weekly", "daily", "one_off"])
+      .enum(["weekly", "daily", "one_off", "custom"])
       .optional()
-      .describe("Recurrence pattern (default: weekly)"),
+      .describe(
+        "Recurrence pattern. Use 'custom' for bi-weekly/monthly patterns. Default: weekly"
+      ),
+    recurrence_interval: z
+      .number()
+      .optional()
+      .describe(
+        "Interval for recurrence (e.g., 2 for 'every 2 weeks'). Default: 1"
+      ),
     due_days: z
       .array(
         z.enum([
@@ -223,6 +231,7 @@ export const createTacticTool: AgentTool = {
           description: params.description,
           weight: params.weight || 1.0,
           recurrence: params.recurrence || "weekly",
+          recurrence_interval: params.recurrence_interval || 1,
           due_days: dueDays,
           assignee_user_id: context.userId,
           status: "active",
@@ -550,10 +559,28 @@ export const updateTacticTool: AgentTool = {
     title: z.string().optional().describe("New title"),
     description: z.string().optional().describe("New description"),
     weight: z.number().optional().describe("New weight (0.1 to 1.0)"),
-    due_days: z
-      .array(z.number().min(1).max(7))
+    recurrence: z
+      .enum(["weekly", "daily", "one_off", "custom"])
       .optional()
-      .describe("New due days (1=Monday, 7=Sunday)"),
+      .describe("New recurrence pattern"),
+    recurrence_interval: z
+      .number()
+      .optional()
+      .describe("New recurrence interval"),
+    due_days: z
+      .array(
+        z.enum([
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday",
+        ])
+      )
+      .optional()
+      .describe("New due days (e.g. ['Monday', 'Friday'])"),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -571,7 +598,22 @@ export const updateTacticTool: AgentTool = {
       if (params.title) updates.title = params.title;
       if (params.description) updates.description = params.description;
       if (params.weight !== undefined) updates.weight = params.weight;
-      if (params.due_days !== undefined) updates.due_days = params.due_days;
+      if (params.recurrence) updates.recurrence = params.recurrence;
+      if (params.recurrence_interval)
+        updates.recurrence_interval = params.recurrence_interval;
+
+      if (params.due_days) {
+        const dayMap: Record<string, number> = {
+          Monday: 1,
+          Tuesday: 2,
+          Wednesday: 3,
+          Thursday: 4,
+          Friday: 5,
+          Saturday: 6,
+          Sunday: 7,
+        };
+        updates.due_days = (params.due_days as string[]).map((d) => dayMap[d]);
+      }
 
       const { error } = await context.supabase
         .from("tactics")
@@ -793,7 +835,8 @@ export const deleteTacticTool: AgentTool = {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to delete tactic",
+        error:
+          error instanceof Error ? error.message : "Failed to delete tactic",
       };
     }
   },

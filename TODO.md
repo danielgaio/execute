@@ -35,7 +35,11 @@
   - Updated `get_wpr_context` to calculate scores per team
   - Added logic to attribute tactic instances to teams based on goal ownership or assignee
   - Updated tests to verify team breakdown logic
-- [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
+- [x] Add natural language input parsing for tactical attributes (recurrence, weights, due dates) ✅ **COMPLETED** (Dec 24, 2025)
+  - Added `recurrence_interval` to database schema
+  - Updated `create_tactic` and `update_tactic` tools to support custom recurrence patterns
+  - Enhanced tool descriptions to guide agent in mapping natural language to schema
+  - Standardized `due_days` input as string array for better LLM compatibility
 - [x] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
 - [x] Implement streaming responses for agent chat to improve perceived performance
 
