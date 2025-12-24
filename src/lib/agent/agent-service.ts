@@ -288,7 +288,8 @@ ${relevantDocs
           const streamResponse = await createStreamingChatCompletion({
             messages: currentMessages,
             tools: this.getToolDefinitions(),
-            toolChoice: "auto",
+            // Avoid re-triggering tool calls during the streaming replay
+            toolChoice: "none",
           });
           
           return {

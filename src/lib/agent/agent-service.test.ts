@@ -9,6 +9,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 // Mock dependencies
 vi.mock("../openai", () => ({
   createChatCompletion: vi.fn(),
+  createStreamingChatCompletion: vi.fn(),
 }));
 
 vi.mock("./audit-service", () => ({
@@ -69,6 +70,37 @@ describe("AgentService", () => {
 
     expect(result.message).toBe("Hello there!");
     expect(result.toolCalls).toBeUndefined();
+  });
+
+  it("should stream final responses without triggering tool calls again", async () => {
+    const mockResponse = {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "Here is your update.",
+            tool_calls: [],
+          },
+        },
+      ],
+    };
+
+    const mockStream = Symbol("stream");
+
+    (openaiLib.createChatCompletion as any).mockResolvedValue(mockResponse);
+    (openaiLib.createStreamingChatCompletion as any).mockResolvedValue(mockStream);
+
+    const result = await agentService.processMessage({
+      messages: [{ role: "user", content: "Give me an update" }],
+      context: { userId: "user-123", orgId: "org-123", supabase: mockSupabase },
+      stream: true,
+    });
+
+    expect(openaiLib.createStreamingChatCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({ toolChoice: "none" })
+    );
+    expect(result.stream).toBe(mockStream as any);
+    expect(result.message).toBeUndefined();
   });
 
   it("should pause execution when a tool requires confirmation", async () => {
