@@ -17,6 +17,12 @@ export interface AgentContextData {
     progress: number;
   }[];
   weeklyScore?: number;
+  scoreBreakdown?: {
+    totalWeight: number;
+    completedWeight: number;
+    totalItems: number;
+    completedItems: number;
+  };
   pendingTasksCount: number;
   overdueTasksCount: number;
   todayTasksCount: number;
@@ -117,6 +123,17 @@ export class ContextBuilder {
       }));
 
       context.weeklyScore = calculateLeadScore(scorableItems);
+      
+      // Calculate Breakdown
+      const plannedItems = scorableItems.filter(i => i.planned);
+      const completedItems = plannedItems.filter(i => i.status === 'done');
+      
+      context.scoreBreakdown = {
+        totalWeight: plannedItems.reduce((sum, i) => sum + i.weight, 0),
+        completedWeight: completedItems.reduce((sum, i) => sum + i.weight, 0),
+        totalItems: plannedItems.length,
+        completedItems: completedItems.length
+      };
 
       // Calculate Counts
       let pendingCount = 0;
@@ -186,7 +203,12 @@ export class ContextBuilder {
     }
 
     if (data.weeklyScore !== undefined) {
-      prompt += `Current Weekly Score: ${data.weeklyScore}%\n`;
+      prompt += `Current Weekly Score: ${data.weeklyScore}%`;
+      if (data.scoreBreakdown) {
+        prompt += ` (${data.scoreBreakdown.completedItems}/${data.scoreBreakdown.totalItems} tasks completed)\n`;
+      } else {
+        prompt += "\n";
+      }
     }
 
     prompt += `Pending Tasks This Week: ${data.pendingTasksCount}\n`;
