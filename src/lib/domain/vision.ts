@@ -18,23 +18,31 @@ export function parseVisionMarkdown(markdown: string): ParsedVision {
   // Normalize line endings
   const text = markdown.replace(/\r\n/g, "\n");
 
+  const cleanSection = (sectionText: string) => {
+    return sectionText
+      .split('\n')
+      .map(line => line.trimEnd())
+      .join('\n')
+      .trim();
+  };
+
   // Extract 12-Month Goals
   // Matches content between "## 📅 12-Month Goals" and the next "##" header or end of string
   const twelveMonthMatch = text.match(/##\s*📅\s*12-Month Goals\s*([\s\S]*?)(?=##|$)/i);
   if (twelveMonthMatch && twelveMonthMatch[1]) {
-    result.twelveMonth = twelveMonthMatch[1].trim();
+    result.twelveMonth = cleanSection(twelveMonthMatch[1]);
   }
 
   // Extract 3-Year Vision
   const threeYearMatch = text.match(/##\s*🎯\s*3-Year Vision\s*([\s\S]*?)(?=##|$)/i);
   if (threeYearMatch && threeYearMatch[1]) {
-    result.threeYear = threeYearMatch[1].trim();
+    result.threeYear = cleanSection(threeYearMatch[1]);
   }
 
   // Extract Long-Term Aspiration
   const longTermMatch = text.match(/##\s*🌟\s*Long-Term Aspiration\s*\(?10\+ Years\)?\s*([\s\S]*?)(?=##|$)/i);
   if (longTermMatch && longTermMatch[1]) {
-    result.longTerm = longTermMatch[1].trim();
+    result.longTerm = cleanSection(longTermMatch[1]);
   }
 
   // Extract Core Values

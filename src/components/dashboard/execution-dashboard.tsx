@@ -117,6 +117,22 @@ export default function ExecutionDashboard({
               Keep executing your lead measures to drive results.
             </Typography>
             <QuickAddTask goals={goals} />
+            
+            <Box sx={{ mt: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Cycle Progress
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {Math.round(cycleProgress)}%
+                </Typography>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={cycleProgress} 
+                sx={{ height: 4, borderRadius: 2, bgcolor: 'action.hover' }} 
+              />
+            </Box>
           </CardContent>
         </Card>
       </Grid>

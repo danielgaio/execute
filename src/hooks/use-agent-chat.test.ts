@@ -41,6 +41,7 @@ describe('useAgentChat', () => {
     // Mock greeting to avoid unhandled rejection warning
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ message: 'Greeting' }),
     });
 
@@ -61,6 +62,7 @@ describe('useAgentChat', () => {
   it('should load greeting on initialization if no initial message', async () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ message: 'Hello from Agent' }),
     });
 
@@ -79,11 +81,13 @@ describe('useAgentChat', () => {
     (global.fetch as any)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ message: 'Greeting' }),
       })
       // Mock message response
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ message: 'Response', toolCalls: [] }),
       });
 
@@ -113,11 +117,13 @@ describe('useAgentChat', () => {
     (global.fetch as any)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ message: 'Greeting' }),
       })
       // Mock tool response
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           message: 'Done',
           toolCalls: [
@@ -157,11 +163,13 @@ describe('useAgentChat', () => {
     (global.fetch as any)
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({ message: 'Greeting' }),
       })
       // Mock tool response
       .mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => 'application/json' },
         json: async () => ({
           message: 'Here is the info',
           toolCalls: [
@@ -197,6 +205,7 @@ describe('useAgentChat', () => {
     
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
+      headers: { get: () => 'application/json' },
       json: async () => ({ message: 'Sure, let\'s plan', toolCalls: [] }),
     });
 
