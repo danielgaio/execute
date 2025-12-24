@@ -7,7 +7,8 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { embeddingService } from "../embedding-service";
 import { logAgentAction, captureEntityState } from "../audit-service";
-import { generateTacticInstancesForWeek, getWeekStart } from "@/utils/planning";
+import { getWeekStart } from "@/utils/planning";
+import { generateInstancesForTacticId } from "@/lib/domain/planning";
 import { deferInstance, skipInstance } from "@/lib/domain/execution";
 
 /**

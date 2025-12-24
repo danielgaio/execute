@@ -110,6 +110,28 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
 }
 
 /**
+ * Helper to generate instances by ID (fetches tactic first).
+ */
+export async function generateInstancesForTacticId(
+  supabase: SupabaseClient,
+  tacticId: string,
+  weekStart: Date
+): Promise<void> {
+  const { data: tactic, error } = await supabase
+    .from("tactics")
+    .select("*")
+    .eq("id", tacticId)
+    .single();
+
+  if (error || !tactic) {
+    console.error(`Tactic ${tacticId} not found or error:`, error);
+    return;
+  }
+
+  await generateInstancesForTactic(supabase, tactic as any, weekStart);
+}
+
+/**
  * Generates tactic instances for a specific tactic for a given week.
  * Idempotent: Checks for existing instances to avoid duplicates.
  */

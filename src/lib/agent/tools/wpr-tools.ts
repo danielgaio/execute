@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
-import { getWeekStart, generateTacticInstancesForWeek } from "@/utils/planning";
+import { getWeekStart } from "@/utils/planning";
+import { generateInstancesForTacticId } from "@/lib/domain/planning";
 import { logAgentAction } from "../audit-service";
 import { embeddingService } from "../embedding-service";
 import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/lib/domain/scoring";
@@ -249,11 +250,10 @@ Notes: ${params.notes}`;
               .eq("week_start", nextWeekStart);
             
             if (count === 0) {
-              await generateTacticInstancesForWeek(
+              await generateInstancesForTacticId(
                 context.supabase,
                 tactic.id,
-                nextWeekDate,
-                context.orgId!
+                nextWeekDate
               );
               generatedCount++;
             }
