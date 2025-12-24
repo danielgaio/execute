@@ -18,11 +18,23 @@ import {
 describe("Team Management Domain", () => {
   let mockSupabase: any;
   let mockUser: any;
+  let mockQueryBuilder: any;
 
   beforeEach(() => {
     mockUser = {
       id: "user-123",
       email: "test@example.com",
+    };
+
+    // Create a proper query builder mock that chains correctly
+    mockQueryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn(),
+      order: vi.fn().mockReturnThis(),
     };
 
     mockSupabase = {
@@ -32,14 +44,18 @@ describe("Team Management Domain", () => {
           error: null,
         }),
       },
-      from: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      update: vi.fn().mockReturnThis(),
-      delete: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      single: vi.fn(),
-      order: vi.fn().mockReturnThis(),
+      from: vi.fn(() => {
+        // Return fresh mock for each query chain
+        return {
+          select: vi.fn().mockReturnThis(),
+          insert: vi.fn().mockReturnThis(),
+          update: vi.fn().mockReturnThis(),
+          delete: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: mockQueryBuilder.single,
+          order: vi.fn().mockReturnThis(),
+        };
+      }),
     };
   });
 
@@ -55,22 +71,40 @@ describe("Team Management Domain", () => {
         updated_at: new Date().toISOString(),
       };
 
-      // User is manager
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { role: "manager" },
-          error: null,
-        })
-        // Team created
-        .mockResolvedValueOnce({
-          data: mockTeam,
-          error: null,
-        });
-
-      // Team member added
-      mockSupabase.insert.mockResolvedValueOnce({
-        data: null,
-        error: null,
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // First call: check org membership
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "manager" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Second call: create team
+          return {
+            insert: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: mockTeam,
+              error: null,
+            }),
+          };
+        } else {
+          // Third call: add team member
+          return {
+            insert: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        }
       });
 
       const result = await createTeam(mockSupabase, {
@@ -84,11 +118,15 @@ describe("Team Management Domain", () => {
     });
 
     it("should fail when user lacks permissions", async () => {
-      // User is only a member
-      mockSupabase.single.mockResolvedValueOnce({
-        data: { role: "member" },
-        error: null,
-      });
+      // Mock: User is only a member
+      mockSupabase.from = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: { role: "member" },
+          error: null,
+        }),
+      }));
 
       const result = await createTeam(mockSupabase, {
         org_id: "org-789",
@@ -109,29 +147,41 @@ describe("Team Management Domain", () => {
         updated_at: new Date().toISOString(),
       };
 
-      // User is owner
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Team created
-        .mockResolvedValueOnce({
-          data: mockTeam,
-          error: null,
-        });
-
-      // Team member added (creator)
-      mockSupabase.insert
-        .mockResolvedValueOnce({
-          data: null,
-          error: null,
-        })
-        // Initial members added
-        .mockResolvedValueOnce({
-          data: null,
-          error: null,
-        });
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // First call: check org membership
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Second call: create team
+          return {
+            insert: vi.fn().mockReturnThis(),
+            select: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: mockTeam,
+              error: null,
+            }),
+          };
+        } else {
+          // Subsequent calls: add team members
+          return {
+            insert: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        }
+      });
 
       const result = await createTeam(mockSupabase, {
         org_id: "org-789",
@@ -146,31 +196,60 @@ describe("Team Management Domain", () => {
 
   describe("addTeamMember", () => {
     it("should add a member when user has permission", async () => {
-      // Get team
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { org_id: "org-789" },
-          error: null,
-        })
-        // Check user permission
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Check team membership
-        .mockResolvedValueOnce({
-          data: null,
-          error: null,
-        })
-        // Check target user is org member
-        .mockResolvedValueOnce({
-          data: { id: "membership-123" },
-          error: null,
-        });
-
-      mockSupabase.insert.mockResolvedValueOnce({
-        data: null,
-        error: null,
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // Get team
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { org_id: "org-789" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Check user permission
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 3) {
+          // Check team membership
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        } else if (callCount === 4) {
+          // Check target user is org member
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { id: "membership-123" },
+              error: null,
+            }),
+          };
+        } else {
+          // Insert team member
+          return {
+            insert: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        }
       });
 
       const result = await addTeamMember(
@@ -185,27 +264,53 @@ describe("Team Management Domain", () => {
     });
 
     it("should fail when target user is not an org member", async () => {
-      // Get team
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { org_id: "org-789" },
-          error: null,
-        })
-        // Check user permission
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Check team membership
-        .mockResolvedValueOnce({
-          data: null,
-          error: null,
-        })
-        // Target user is NOT org member
-        .mockResolvedValueOnce({
-          data: null,
-          error: null,
-        });
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // Get team
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { org_id: "org-789" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Check user permission
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 3) {
+          // Check team membership
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        } else {
+          // Target user is NOT org member
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        }
+      });
 
       const result = await addTeamMember(
         mockSupabase,
@@ -221,26 +326,52 @@ describe("Team Management Domain", () => {
 
   describe("updateMemberRole", () => {
     it("should update a team member's role", async () => {
-      // Get team
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { org_id: "org-789" },
-          error: null,
-        })
-        // Check user permission
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Get current role
-        .mockResolvedValueOnce({
-          data: { role: "member" },
-          error: null,
-        });
-
-      mockSupabase.update.mockResolvedValueOnce({
-        data: null,
-        error: null,
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // Get team
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { org_id: "org-789" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Check user permission
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 4) {
+          // Get current role - needs double eq
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "member" },
+              error: null,
+            }),
+          };
+        } else {
+          // Update role - needs double eq
+          return {
+            update: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: null,
+              error: null,
+            }),
+          };
+        }
       });
 
       const result = await updateMemberRole(
@@ -255,27 +386,52 @@ describe("Team Management Domain", () => {
     });
 
     it("should prevent demoting the last manager", async () => {
-      // Get team
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { org_id: "org-789" },
-          error: null,
-        })
-        // Check user permission
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Get current role (is manager)
-        .mockResolvedValueOnce({
-          data: { role: "manager" },
-          error: null,
-        });
-
-      // Get all managers (only 1)
-      mockSupabase.select.mockResolvedValueOnce({
-        data: [{ id: "member-1" }],
-        error: null,
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // Get team
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { org_id: "org-789" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Check user permission
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 3) {
+          // Get current role (is manager) - needs double eq
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "manager" },
+              error: null,
+            }),
+          };
+        } else {
+          // Get all managers (only 1) - needs double eq, returns data directly
+          const mockEq = vi.fn().mockResolvedValue({
+            data: [{ id: "member-1" }],
+            error: null,
+          });
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn(() => ({ eq: mockEq })),
+          };
+        }
       });
 
       const result = await updateMemberRole(
@@ -292,11 +448,15 @@ describe("Team Management Domain", () => {
 
   describe("updateOrgMemberRole", () => {
     it("should prevent user from changing own role", async () => {
-      // Check user permission
-      mockSupabase.single.mockResolvedValueOnce({
-        data: { role: "owner" },
-        error: null,
-      });
+      // Mock: Check user permission
+      mockSupabase.from = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: { role: "owner" },
+          error: null,
+        }),
+      }));
 
       const result = await updateOrgMemberRole(
         mockSupabase,
@@ -310,22 +470,42 @@ describe("Team Management Domain", () => {
     });
 
     it("should prevent demoting the last owner", async () => {
-      // Check user permission
-      mockSupabase.single
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        })
-        // Get current role of target
-        .mockResolvedValueOnce({
-          data: { role: "owner" },
-          error: null,
-        });
-
-      // Get all owners (only 1)
-      mockSupabase.select.mockResolvedValueOnce({
-        data: [{ id: "owner-1" }],
-        error: null,
+      // Mock sequence of queries
+      let callCount = 0;
+      mockSupabase.from = vi.fn(() => {
+        callCount++;
+        
+        if (callCount === 1) {
+          // Check user permission
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else if (callCount === 2) {
+          // Get current role of target
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn().mockReturnThis(),
+            single: vi.fn().mockResolvedValue({
+              data: { role: "owner" },
+              error: null,
+            }),
+          };
+        } else {
+          // Get all owners (only 1) - needs double eq, returns data directly
+          const mockEq = vi.fn().mockResolvedValue({
+            data: [{ id: "owner-1" }],
+            error: null,
+          });
+          return {
+            select: vi.fn().mockReturnThis(),
+            eq: vi.fn(() => ({ eq: mockEq })),
+          };
+        }
       });
 
       const result = await updateOrgMemberRole(
