@@ -6,6 +6,52 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getEntityHistory, getRecentAuditActivity } from "../audit-service";
+import { embeddingService } from "../embedding-service";
+
+/**
+ * Search the knowledge base (RAG)
+ */
+export const searchKnowledgeBaseTool: AgentTool = {
+  name: "search_knowledge_base",
+  description:
+    "Search the project's knowledge base using semantic search. Use this to find goals, tactics, vision, or past notes related to a specific topic (e.g., 'marketing strategy', 'revenue goals', 'Q1 plans').",
+  category: "query",
+  requiresConfirmation: false,
+  parameters: z.object({
+    query: z.string().describe("The natural language search query"),
+    limit: z.number().optional().describe("Max results (default: 5)"),
+    threshold: z.number().optional().describe("Similarity threshold 0-1 (default: 0.5)"),
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      if (!context.orgId) throw new Error("Organization context required");
+
+      const results = await embeddingService.searchEmbeddings(
+        context.supabase,
+        params.query,
+        context.orgId,
+        params.limit || 5,
+        params.threshold || 0.5
+      );
+
+      return {
+        success: true,
+        data: {
+          results: results.map(r => ({
+            content: r.content,
+            type: r.metadata.entity_type,
+            title: r.metadata.title,
+            similarity: r.similarity
+          })),
+          count: results.length,
+          message: `Found ${results.length} relevant items.`
+        }
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+};
 
 /**
  * List all active cycles for the user's organization
@@ -533,6 +579,7 @@ export const getRecentActivityTool: AgentTool = {
 
 // Export all query tools
 export const queryTools = [
+  searchKnowledgeBaseTool,
   listCyclesTool,
   listGoalsTool,
   listTacticsTool,

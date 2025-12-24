@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getWeeklyScoreTool, getTodayFocusTool } from "./query-tools";
+import { getWeeklyScoreTool, getTodayFocusTool, searchKnowledgeBaseTool } from "./query-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { embeddingService } from "../embedding-service";
 
 // Mock dependencies
 vi.mock("../audit-service", () => ({
   getEntityHistory: vi.fn(),
   getRecentAuditActivity: vi.fn(),
+}));
+
+vi.mock("../embedding-service", () => ({
+  embeddingService: {
+    searchEmbeddings: vi.fn(),
+  },
 }));
 
 describe("Query Tools", () => {
@@ -34,6 +41,47 @@ describe("Query Tools", () => {
     };
 
     vi.clearAllMocks();
+  });
+
+  describe("search_knowledge_base", () => {
+    it("should call embedding service and return results", async () => {
+      const mockResults = [
+        { content: "Goal: Increase Revenue", metadata: { entity_type: "goal", title: "Revenue" }, similarity: 0.9 },
+        { content: "Tactic: Cold Calls", metadata: { entity_type: "tactic", title: "Calls" }, similarity: 0.8 },
+      ];
+
+      (embeddingService.searchEmbeddings as any).mockResolvedValue(mockResults);
+
+      const result = await searchKnowledgeBaseTool.handler(
+        { query: "revenue plans", limit: 2 },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(embeddingService.searchEmbeddings).toHaveBeenCalledWith(
+        expect.anything(),
+        "revenue plans",
+        "org-123",
+        2,
+        0.5
+      );
+      
+      const data = result.data as any;
+      expect(data.count).toBe(2);
+      expect(data.results[0].title).toBe("Revenue");
+    });
+
+    it("should handle errors", async () => {
+      (embeddingService.searchEmbeddings as any).mockRejectedValue(new Error("Search failed"));
+
+      const result = await searchKnowledgeBaseTool.handler(
+        { query: "fail" },
+        mockContext
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Search failed");
+    });
   });
 
   describe("get_weekly_score", () => {
