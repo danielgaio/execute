@@ -1,29 +1,10 @@
-import { Typography, Paper, Box, Button, Stack } from '@mui/material'
+import { Typography, Box } from '@mui/material'
 import { createClient } from '@/utils/supabase/server'
 import CreateOrganizationForm from './organizations/create-form'
-import Link from 'next/link'
-import { toggleInstanceStatus } from './actions'
-import { getWeekStart } from '@/utils/planning'
 import { cookies } from 'next/headers'
 import EmptyCycleState from '@/components/dashboard/empty-cycle-state'
-import DailyBriefingButton from '@/components/dashboard/daily-briefing-button'
-
-interface TacticInstance {
-  id: string
-  status: string
-  tactics: {
-    title: string
-    weight: number
-  } | null
-}
-
-interface WeeklyInstance {
-  id: string
-  status: string
-  tactics: {
-    weight: number
-  } | null
-}
+import ExecutionDashboard from '@/components/dashboard/execution-dashboard'
+import { getDashboardData } from '@/lib/data/dashboard'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -52,133 +33,30 @@ export default async function DashboardPage() {
     ? activeOrgId 
     : memberships[0].org_id
 
-  // Fetch active cycle
-  const { data: activeCycle } = await supabase
-    .from('cycles')
-    .select('*')
-    .eq('org_id', currentOrgId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .single()
-
-  // Fetch today's instances
-  const today = new Date().toISOString().split('T')[0]
-  const { data: todaysInstances } = await supabase
-    .from('tactic_instances')
-    .select(`
-      *,
-      tactics (
-        title
-      )
-    `)
-    .eq('org_id', currentOrgId)
-    .eq('due_date', today)
-    .order('status', { ascending: false })
-
-  // Calculate Weekly Score
-  const weekStart = getWeekStart().toISOString().split('T')[0]
-  const { data: weeklyInstances } = await supabase
-    .from('tactic_instances')
-    .select(`
-      id,
-      status,
-      tactics (
-        weight
-      )
-    `)
-    .eq('org_id', currentOrgId)
-    .eq('week_start', weekStart)
-    .eq('planned', true)
-
-  let weeklyScore = 100
-  if (weeklyInstances && weeklyInstances.length > 0) {
-    let totalWeight = 0
-    let completedWeight = 0
-    
-    ;(weeklyInstances as unknown as WeeklyInstance[]).forEach((instance) => {
-      const weight = instance.tactics?.weight || 1.0
-      totalWeight += weight
-      if (instance.status === 'done') {
-        completedWeight += weight
-      }
-    })
-
-    if (totalWeight > 0) {
-      weeklyScore = Math.round((completedWeight / totalWeight) * 100)
-    }
-  }
+  // Fetch Dashboard Data
+  const { activeCycle, weeklyScore, todaysInstances, overdueInstances } = await getDashboardData(supabase, currentOrgId)
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Welcome to Execute
-      </Typography>
-      <Typography paragraph>
-        This is your dashboard. From here you can manage your 12-week cycles, goals, and tactics.
-      </Typography>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" gutterBottom>
+          Execution Dashboard
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Track your lead indicators and execute your 12-week plan.
+        </Typography>
+      </Box>
       
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mt: 2 }}>
-        <Box sx={{ flex: 1, minWidth: 300 }}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240 }}>
-            <Typography variant="h6" color="primary" gutterBottom>
-              Current Cycle
-            </Typography>
-            {activeCycle ? (
-              <Box>
-                <Typography variant="h5" gutterBottom>{activeCycle.title}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {new Date(activeCycle.start_date).toLocaleDateString()} - {new Date(activeCycle.end_date).toLocaleDateString()}
-                </Typography>
-              </Box>
-            ) : (
-              <EmptyCycleState />
-            )}
-          </Paper>
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 300 }}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240, overflow: 'auto' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" color="primary">
-                Today&apos;s Focus
-              </Typography>
-              <DailyBriefingButton />
-            </Box>
-            {todaysInstances && todaysInstances.length > 0 ? (
-              <Box>
-                {todaysInstances.map((instance: TacticInstance) => (
-                  <Box key={instance.id} sx={{ display: 'flex', alignItems: 'center', mb: 1, justifyContent: 'space-between' }}>
-                    <Typography variant="body2" sx={{ textDecoration: instance.status === 'done' ? 'line-through' : 'none', color: instance.status === 'done' ? 'text.secondary' : 'text.primary' }}>
-                      {instance.tactics?.title}
-                    </Typography>
-                    <form action={toggleInstanceStatus.bind(null, instance.id, instance.status)}>
-                      <Button type="submit" size="small" variant={instance.status === 'done' ? 'outlined' : 'contained'} color={instance.status === 'done' ? 'secondary' : 'primary'} sx={{ minWidth: 60 }}>
-                        {instance.status === 'done' ? 'Undo' : 'Done'}
-                      </Button>
-                    </form>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Typography variant="body1">
-                You have no tactics due today.
-              </Typography>
-            )}
-          </Paper>
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 300 }}>
-          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 240 }}>
-            <Typography variant="h6" color="primary" gutterBottom>
-              Weekly Score
-            </Typography>
-            <Typography variant="h3" component="div" color={weeklyScore >= 85 ? 'success.main' : weeklyScore >= 60 ? 'warning.main' : 'error.main'}>
-              {weeklyScore}%
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-                Lead Indicator Score
-            </Typography>
-          </Paper>
-        </Box>
-      </Stack>
+      {!activeCycle ? (
+        <EmptyCycleState />
+      ) : (
+        <ExecutionDashboard 
+          activeCycle={activeCycle}
+          weeklyScore={weeklyScore}
+          todaysInstances={todaysInstances}
+          overdueInstances={overdueInstances}
+        />
+      )}
     </Box>
   )
 }
