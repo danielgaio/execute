@@ -18,7 +18,9 @@ export class EmailService {
     itemCount: number
   ): Promise<EmailResult> {
     if (!resend) {
-      console.log(`[Mock Email] To: ${to} | Subject: Weekly Plan Ready | Items: ${itemCount}`);
+      console.log(
+        `[Mock Email] To: ${to} | Subject: Weekly Plan Ready | Items: ${itemCount}`
+      );
       return { success: true };
     }
 
@@ -62,7 +64,9 @@ export class EmailService {
     notes: string
   ): Promise<EmailResult> {
     if (!resend) {
-      console.log(`[Mock Email] To: ${to} | Subject: WPR Summary | Score: ${score}`);
+      console.log(
+        `[Mock Email] To: ${to} | Subject: WPR Summary | Score: ${score}`
+      );
       return { success: true };
     }
 
@@ -131,7 +135,9 @@ export class EmailService {
             <p><strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong> on Execute.</p>
             
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p><strong>Your Role:</strong> ${role.charAt(0).toUpperCase() + role.slice(1)}</p>
+              <p><strong>Your Role:</strong> ${
+                role.charAt(0).toUpperCase() + role.slice(1)
+              }</p>
               <p style="margin-bottom: 0; font-size: 14px; color: #666;">
                 You'll be able to collaborate on 12-week execution plans, track tactics, and participate in Weekly Progress Reviews.
               </p>
@@ -160,6 +166,87 @@ export class EmailService {
       return { success: true, messageId: data?.id };
     } catch (error) {
       console.error("Failed to send invitation email:", error);
+      return { success: false, error };
+    }
+  }
+
+  /**
+   * Send a daily briefing email.
+   */
+  static async sendDailyBriefing(
+    to: string,
+    name: string,
+    briefing: any // Using 'any' for now to avoid circular dependency or complex type import, but ideally BriefingService.DailyBriefing
+  ): Promise<EmailResult> {
+    if (!resend) {
+      console.log(
+        `[Mock Email] To: ${to} | Subject: Daily Briefing | Overdue: ${briefing.stats.overdueCount}`
+      );
+      return { success: true };
+    }
+
+    try {
+      const overdueSection =
+        briefing.overdue.length > 0
+          ? `<div style="background-color: #fff0f0; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+             <h3 style="color: #d32f2f; margin-top: 0;">⚠️ Overdue (${
+               briefing.overdue.length
+             })</h3>
+             <ul style="padding-left: 20px;">
+               ${briefing.overdue
+                 .map(
+                   (i: any) =>
+                     `<li><strong>${i.title}</strong> (Due: ${i.due_date})</li>`
+                 )
+                 .join("")}
+             </ul>
+           </div>`
+          : "";
+
+      const todaySection =
+        briefing.today.length > 0
+          ? `<div style="background-color: #f0f7ff; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+             <h3 style="color: #1976d2; margin-top: 0;">📅 Today's Focus (${
+               briefing.today.length
+             })</h3>
+             <ul style="padding-left: 20px;">
+               ${briefing.today
+                 .map(
+                   (i: any) =>
+                     `<li><strong>${
+                       i.title
+                     }</strong> [${i.status.toUpperCase()}]</li>`
+                 )
+                 .join("")}
+             </ul>
+           </div>`
+          : `<p>🎉 Nothing scheduled for today.</p>`;
+
+      const { data, error } = await resend.emails.send({
+        from: EMAIL_FROM,
+        to,
+        subject: `Daily Briefing: ${briefing.date}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Good Morning, ${name}</h2>
+            <p>Here is your briefing for <strong>${briefing.date}</strong>.</p>
+            
+            ${overdueSection}
+            ${todaySection}
+
+            <div style="margin: 20px 0;">
+              <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="background-color: #000; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open Dashboard</a>
+            </div>
+            <hr />
+            <p style="color: #666; font-size: 12px;">Execute - Agent-First Productivity</p>
+          </div>
+        `,
+      });
+
+      if (error) throw error;
+      return { success: true, messageId: data?.id };
+    } catch (error) {
+      console.error("Failed to send email:", error);
       return { success: false, error };
     }
   }

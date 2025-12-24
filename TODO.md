@@ -19,6 +19,12 @@
   - Added unit tests for team context functionality (3/3 tests passing)
   - Updated agent-service.ts to pass userId when building context
   - Documentation: docs/AGENT.md updated with context builder details
+- [x] Implement Proactive Agent Notification System (Daily Briefing) ✅ **COMPLETED** (Dec 24, 2025)
+  - Created `BriefingService` to centralize briefing logic (Overdue, Today, Upcoming)
+  - Updated `get_daily_briefing` agent tool to use the service
+  - Implemented `EmailService.sendDailyBriefing` with HTML formatting
+  - Created Cron Job (`/api/cron/daily-briefing`) to automatically send briefings to all active users
+  - Secured Cron endpoint with `CRON_SECRET`
 
 ### 2. Agent-Assisted Planning & Execution Tools
 

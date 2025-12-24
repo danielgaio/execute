@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
+import { BriefingService } from "../../briefing/service";
 
 /**
  * Get a comprehensive daily briefing
@@ -18,87 +19,44 @@ export const getDailyBriefingTool: AgentTool = {
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
-      const today = new Date();
-      const todayStr = today.toISOString().split("T")[0];
-      
-      // Calculate next 3 days
-      const next3Days = new Date(today);
-      next3Days.setDate(today.getDate() + 3);
-      const next3DaysStr = next3Days.toISOString().split("T")[0];
+      const briefing = await BriefingService.getBriefing(
+        context.supabase,
+        context.orgId!,
+        params.timezone
+      );
 
-      // 1. Fetch Overdue Items (Pending items with due_date < today)
-      const { data: overdue } = await context.supabase
-        .from("tactic_instances")
-        .select(
-          `
-          id, due_date, status,
-          tactics ( title, weight, goals ( title ) )
-        `
-        )
-        .eq("org_id", context.orgId)
-        .lt("due_date", todayStr)
-        .eq("status", "pending")
-        .order("due_date", { ascending: true });
+      // Format message for the agent
+      const overdueMsg =
+        briefing.overdue.length > 0
+          ? `⚠️ ${briefing.overdue.length} Overdue Items:\n${briefing.overdue
+              .map((i) => `- [${i.due_date}] ${i.title} (${i.goal_title})`)
+              .join("\n")}`
+          : "✅ No overdue items.";
 
-      // 2. Fetch Today's Items
-      const { data: todayItems } = await context.supabase
-        .from("tactic_instances")
-        .select(
-          `
-          id, due_date, status,
-          tactics ( title, weight, goals ( title ) )
-        `
-        )
-        .eq("org_id", context.orgId)
-        .eq("due_date", todayStr)
-        .neq("status", "deferred") // Exclude deferred
-        .order("status", { ascending: false }); // Done first, then pending
+      const todayMsg =
+        briefing.today.length > 0
+          ? `📅 Today's Focus (${briefing.today.length}):\n${briefing.today
+              .map(
+                (i) =>
+                  `- [${i.status.toUpperCase()}] ${i.title} (Weight: ${
+                    i.weight
+                  })`
+              )
+              .join("\n")}`
+          : "🎉 Nothing scheduled for today.";
 
-      // 3. Fetch Upcoming Items (Tomorrow to +3 days)
-      const { data: upcoming } = await context.supabase
-        .from("tactic_instances")
-        .select(
-          `
-          id, due_date, status,
-          tactics ( title, weight, goals ( title ) )
-        `
-        )
-        .eq("org_id", context.orgId)
-        .gt("due_date", todayStr)
-        .lte("due_date", next3DaysStr)
-        .eq("status", "pending")
-        .order("due_date", { ascending: true });
-
-      // 4. Synthesize Briefing
-      const overdueCount = overdue?.length || 0;
-      const todayCount = todayItems?.length || 0;
-      const todayPending = todayItems?.filter(i => i.status === 'pending').length || 0;
-      const upcomingCount = upcoming?.length || 0;
-
-      // Prioritization Logic
-      // High Priority = Overdue OR (Today + High Weight > 0.7)
-      const highPriority = [
-        ...(overdue || []).map(i => ({ ...i, reason: "Overdue" })),
-        ...(todayItems || []).filter(i => i.status === 'pending' && (i.tactics?.weight || 0) >= 0.7).map(i => ({ ...i, reason: "High Impact" }))
-      ];
+      const upcomingMsg =
+        briefing.upcoming.length > 0
+          ? `🔮 Upcoming (Next 3 Days):\n${briefing.upcoming
+              .map((i) => `- [${i.due_date}] ${i.title}`)
+              .join("\n")}`
+          : "No immediate upcoming items.";
 
       return {
         success: true,
         data: {
-          date: todayStr,
-          summary: {
-            overdue: overdueCount,
-            todayTotal: todayCount,
-            todayPending: todayPending,
-            upcoming: upcomingCount
-          },
-          sections: {
-            overdue: overdue || [],
-            today: todayItems || [],
-            upcoming: upcoming || [],
-            highPriority: highPriority
-          },
-          message: `Briefing ready. You have ${todayPending} items due today and ${overdueCount} overdue.`
+          briefing,
+          message: `Daily Briefing for ${briefing.date}:\n\n${overdueMsg}\n\n${todayMsg}\n\n${upcomingMsg}`,
         },
       };
     } catch (error: any) {
