@@ -215,10 +215,7 @@ describe("Planning Tools", () => {
                 data: [
                   { 
                     title: 'Heavy Goal', 
-                    tactics: [
-                      { title: 'Big Task', weight: 10 },
-                      { title: 'Another Big Task', weight: 15 }
-                    ] 
+                    tactics: Array(20).fill({ title: 'Small Task', weight: 1.0 })
                   }
                 ]
               })
@@ -231,8 +228,8 @@ describe("Planning Tools", () => {
       const result = await reviewPlanFeasibilityTool.handler({}, mockContext);
 
       expect(result.success).toBe(true);
-      expect(result.data.warnings).toContain('Total weekly load is high (25). Ensure capacity exists.');
-      expect(result.data.warnings).toContain('Tactic "Big Task" has a very high weight (10). Consider breaking it down.');
+      expect(result.data.warnings).toContain('Total weekly tactic count is high (20). Ensure you have capacity to execute all of them consistently.');
+      expect(result.data.warnings).toContain('Goal "Heavy Goal" has many tactics (20). Consider simplifying or focusing on the most impactful ones.');
     });
   });
 

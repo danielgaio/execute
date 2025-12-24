@@ -1307,6 +1307,125 @@ export const suggestAdjustmentsTool: AgentTool = {
   }
 };
 
+/**
+ * Get a daily briefing with score prediction and focus items
+ */
+export const getDailyBriefingTool: AgentTool = {
+  name: "get_daily_briefing",
+  description:
+    "Get a daily briefing including today's focus items, current weekly score, and a predicted end-of-week score. Use this to guide the user's day.",
+  category: "analysis",
+  requiresConfirmation: false,
+  parameters: z.object({}),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const weekStart = getWeekStart().toISOString().split("T")[0];
+
+      // 1. Get all instances for the week (for scoring)
+      const { data: weekInstances, error: weekError } = await context.supabase
+        .from("tactic_instances")
+        .select(`
+          id, status, due_date, planned,
+          tactics ( id, title, weight )
+        `)
+        .eq("org_id", context.orgId)
+        .eq("week_start", weekStart)
+        .eq("planned", true);
+
+      if (weekError) throw weekError;
+
+      // 2. Calculate Scores
+      let totalWeight = 0;
+      let completedWeight = 0;
+      let pendingWeight = 0;
+      let skippedWeight = 0;
+
+      const instances = (weekInstances || []) as any[];
+      
+      instances.forEach((inst) => {
+        const weight = inst.tactics?.weight || 1.0;
+        totalWeight += weight;
+        
+        if (inst.status === "done") {
+          completedWeight += weight;
+        } else if (inst.status === "pending") {
+          pendingWeight += weight;
+        } else if (inst.status === "skipped") {
+          skippedWeight += weight;
+        }
+      });
+
+      const currentScore = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
+      // Predicted score = (Completed + Pending) / Total. (Assumes all pending will be done)
+      // If skipped, that weight is lost.
+      const predictedScore = totalWeight > 0 ? Math.round(((completedWeight + pendingWeight) / totalWeight) * 100) : 100;
+
+      // 3. Get Today's Focus & Overdue
+      const todaysFocus: any[] = [];
+      const overdue: any[] = [];
+
+      instances.forEach((inst) => {
+        if (inst.status !== "pending") return;
+
+        const item = {
+          id: inst.id,
+          title: inst.tactics?.title,
+          weight: inst.tactics?.weight,
+          due_date: inst.due_date
+        };
+
+        if (inst.due_date === today) {
+          todaysFocus.push(item);
+        } else if (inst.due_date < today) {
+          overdue.push(item);
+        }
+      });
+
+      // 4. Generate Suggestions
+      const suggestions: string[] = [];
+      if (predictedScore < 85) {
+        suggestions.push(`You are projected to finish at ${predictedScore}%. To fix this, you cannot afford to skip any more tasks.`);
+        if (skippedWeight > 0) {
+           suggestions.push(`You have already skipped ${(skippedWeight/totalWeight*100).toFixed(0)}% of your planned impact.`);
+        }
+      } else {
+        suggestions.push(`You're on track for a strong week (${predictedScore}%).`);
+      }
+
+      if (overdue.length > 0) {
+        suggestions.push(`You have ${overdue.length} overdue items. Clear these first.`);
+      }
+
+      return {
+        success: true,
+        data: {
+          date: today,
+          weekStart,
+          scores: {
+            current: currentScore,
+            predicted: predictedScore,
+            total_weight: totalWeight
+          },
+          focus: {
+            today: todaysFocus,
+            overdue: overdue,
+            count: todaysFocus.length + overdue.length
+          },
+          suggestions,
+          message: `Daily Briefing: Current Score ${currentScore}%, Projected ${predictedScore}%. ${todaysFocus.length} items due today.`
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to generate briefing"
+      };
+    }
+  }
+};
+
 // Export all analysis tools
 export const analysisTools = [
   explainStatusTool,
@@ -1315,4 +1434,5 @@ export const analysisTools = [
   analyzeLagLeadCorrelationTool,
   predictScoreTool,
   suggestAdjustmentsTool,
+  getDailyBriefingTool,
 ];

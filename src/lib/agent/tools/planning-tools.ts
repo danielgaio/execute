@@ -197,26 +197,25 @@ export const reviewPlanFeasibilityTool: AgentTool = {
 
       const issues: string[] = [];
       const warnings: string[] = [];
-      let totalWeeklyWeight = 0;
+      let totalTacticsCount = 0;
 
       goals.forEach((goal: any) => {
         if (!goal.tactics || goal.tactics.length === 0) {
           issues.push(`Goal "${goal.title}" has no tactics.`);
         } else {
-          goal.tactics.forEach((tactic: any) => {
-            if (tactic.weight > 5)
-              warnings.push(
-                `Tactic "${tactic.title}" has a very high weight (${tactic.weight}). Consider breaking it down.`
-              );
-            totalWeeklyWeight += tactic.weight; // Simplified calculation
-          });
+          if (goal.tactics.length > 5) {
+            warnings.push(
+              `Goal "${goal.title}" has many tactics (${goal.tactics.length}). Consider simplifying or focusing on the most impactful ones.`
+            );
+          }
+          totalTacticsCount += goal.tactics.length;
         }
       });
 
-      // Heuristic: If total weight > 20 (arbitrary "hours" or "points"), flag it
-      if (totalWeeklyWeight > 20) {
+      // Heuristic: If total tactics > 15, flag it as high load
+      if (totalTacticsCount > 15) {
         warnings.push(
-          `Total weekly load is high (${totalWeeklyWeight}). Ensure capacity exists.`
+          `Total weekly tactic count is high (${totalTacticsCount}). Ensure you have capacity to execute all of them consistently.`
         );
       }
 
@@ -226,7 +225,7 @@ export const reviewPlanFeasibilityTool: AgentTool = {
           score: issues.length === 0 ? (warnings.length === 0 ? 100 : 80) : 50,
           issues,
           warnings,
-          totalWeeklyWeight,
+          totalTacticsCount,
           message: "Feasibility review complete.",
         },
       };

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { predictScoreTool, suggestAdjustmentsTool } from "./analysis-tools";
+import { predictScoreTool, suggestAdjustmentsTool, getDailyBriefingTool } from "./analysis-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
+import * as planningUtils from "@/utils/planning";
+
+vi.mock("@/utils/planning", () => ({
+  getWeekStart: vi.fn().mockReturnValue(new Date("2025-12-22")), // Monday
+}));
 
 describe("Analysis Tools", () => {
   let mockSupabase: any;
@@ -193,6 +198,45 @@ describe("Analysis Tools", () => {
 
       expect(result.success).toBe(true);
       expect(result.data.message).toContain("No pending tasks");
+    });
+  });
+
+  describe("get_daily_briefing", () => {
+    it("should return briefing with scores and focus items", async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const mockInstances = [
+        { id: "1", status: "done", due_date: today, tactics: { title: "Done Task", weight: 1.0 } },
+        { id: "2", status: "pending", due_date: today, tactics: { title: "Today Task", weight: 1.0 } },
+        { id: "3", status: "pending", due_date: "2025-12-20", tactics: { title: "Overdue Task", weight: 1.0 } }, // Overdue
+        { id: "4", status: "skipped", due_date: today, tactics: { title: "Skipped Task", weight: 1.0 } },
+      ];
+
+      mockSupabase.from.mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: mockInstances, error: null }),
+            }),
+          }),
+        }),
+      });
+
+      const result = await getDailyBriefingTool.handler({}, mockContext);
+
+      expect(result.success).toBe(true);
+      // Total weight: 4. Completed: 1. Pending: 2. Skipped: 1.
+      // Current Score: 1/4 = 25%
+      // Predicted Score: (1 + 2) / 4 = 75%
+      expect(result.data.scores.current).toBe(25);
+      expect(result.data.scores.predicted).toBe(75);
+      
+      expect(result.data.focus.today).toHaveLength(1);
+      expect(result.data.focus.today[0].title).toBe("Today Task");
+      
+      expect(result.data.focus.overdue).toHaveLength(1);
+      expect(result.data.focus.overdue[0].title).toBe("Overdue Task");
+
+      expect(result.data.suggestions[0]).toContain("projected to finish at 75%");
     });
   });
 });
