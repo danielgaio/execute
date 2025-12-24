@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool, updateTacticTool, bulkUpdateTacticsTool } from "./action-tools";
+import { createCycleTool, createGoalTool, createTacticTool, markTacticCompleteTool, deferTacticTool, updateTacticTool, bulkUpdateTacticsTool, deleteTacticTool } from "./action-tools";
 import * as auditService from "../audit-service";
 import * as embeddingService from "../embedding-service";
 import * as planningUtils from "@/utils/planning";
+import * as planningDomain from "@/lib/domain/planning";
 import * as executionDomain from "@/lib/domain/execution";
 import { SupabaseClient } from "@supabase/supabase-js";
 
@@ -35,7 +36,11 @@ vi.mock("../embedding-service", () => ({
 
 vi.mock("@/utils/planning", () => ({
   generateTacticInstancesForWeek: vi.fn(),
-  getWeekStart: vi.fn().mockReturnValue("2025-01-01"),
+  getWeekStart: vi.fn().mockReturnValue(new Date("2025-01-01")),
+}));
+
+vi.mock("@/lib/domain/planning", () => ({
+  generateInstancesForTacticId: vi.fn(),
 }));
 
 // Mock the domain layer
@@ -147,11 +152,10 @@ describe("Action Tools", () => {
 
       expect(result.success).toBe(true);
       expect(mockSupabase.from).toHaveBeenCalledWith("tactics");
-      expect(planningUtils.generateTacticInstancesForWeek).toHaveBeenCalledWith(
+      expect(planningDomain.generateInstancesForTacticId).toHaveBeenCalledWith(
         expect.anything(),
         "tactic-1",
-        expect.anything(),
-        "org-123"
+        expect.any(Date)
       );
       expect(auditService.logAgentAction).toHaveBeenCalled();
     });
@@ -303,6 +307,43 @@ describe("Action Tools", () => {
        expect(result.success).toBe(true);
        expect(mockSupabase.from).toHaveBeenCalledWith("tactic_instances");
        expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({ status: "done", notes: "Done all" }));
+    });
+  });
+
+  describe("delete_tactic", () => {
+    it("should delete a tactic and log action", async () => {
+      // Mock captureEntityState to return a tactic
+      (auditService.captureEntityState as any).mockResolvedValue({
+        id: "tac-delete-1",
+        title: "Tactic to Delete",
+      });
+
+      // Mock delete chain
+      const deleteChain = {
+        eq: vi.fn().mockReturnThis(),
+        filter: vi.fn().mockReturnThis(),
+        match: vi.fn().mockReturnThis(),
+        then: (resolve: any) => resolve({ error: null }),
+      };
+      mockSupabase.delete = vi.fn().mockReturnValue(deleteChain);
+
+      const result = await deleteTacticTool.handler(
+        { tactic_id: "tac-delete-1", reason: "Obsolete" },
+        mockContext
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockSupabase.from).toHaveBeenCalledWith("tactics");
+      expect(mockSupabase.delete).toHaveBeenCalled();
+      expect(auditService.logAgentAction).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "delete",
+          entityType: "tactic",
+          entityId: "tac-delete-1",
+          metadata: expect.objectContaining({ reason: "Obsolete" }),
+        })
+      );
     });
   });
 });
