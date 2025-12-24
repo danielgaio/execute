@@ -186,6 +186,49 @@ export class EmailService {
     }
 
     try {
+      const analysisSection = briefing.scoreAnalysis
+        ? (() => {
+            const { score, status, recoveryPath } = briefing.scoreAnalysis;
+            const color =
+              status === "excellent"
+                ? "#2e7d32"
+                : status === "good"
+                ? "#1976d2"
+                : status === "at-risk"
+                ? "#ed6c02"
+                : "#d32f2f";
+
+            let recoveryHtml = "";
+            if (
+              (status === "at-risk" || status === "critical") &&
+              recoveryPath.length > 0
+            ) {
+              recoveryHtml = `
+                 <div style="margin-top: 10px; font-size: 13px; background-color: #fff8e1; padding: 10px; border-radius: 4px;">
+                   <strong>💡 Recovery Path:</strong> Complete these to improve your score:
+                   <ul style="margin: 5px 0; padding-left: 20px;">
+                     ${recoveryPath
+                       .map((i: any) => `<li>${i.title}</li>`)
+                       .join("")}
+                   </ul>
+                 </div>
+               `;
+            }
+
+            return `
+              <div style="border: 1px solid #eee; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0; color: #333; font-size: 16px;">Weekly Score</h3>
+                <div style="font-size: 24px; font-weight: bold; color: ${color}; margin-bottom: 5px;">
+                  ${score.toFixed(
+                    0
+                  )}% <span style="font-size: 14px; font-weight: normal; color: #666; vertical-align: middle;">(${status.toUpperCase()})</span>
+                </div>
+                ${recoveryHtml}
+              </div>
+            `;
+          })()
+        : "";
+
       const overdueSection =
         briefing.overdue.length > 0
           ? `<div style="background-color: #fff0f0; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
@@ -231,6 +274,7 @@ export class EmailService {
             <h2>Good Morning, ${name}</h2>
             <p>Here is your briefing for <strong>${briefing.date}</strong>.</p>
             
+            ${analysisSection}
             ${overdueSection}
             ${todaySection}
 

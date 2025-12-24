@@ -25,6 +25,7 @@
   - Implemented `EmailService.sendDailyBriefing` with HTML formatting
   - Created Cron Job (`/api/cron/daily-briefing`) to automatically send briefings to all active users
   - Secured Cron endpoint with `CRON_SECRET`
+  - **Integrated Score Analysis**: Briefing now includes Weekly Score, Status, and Recovery Path.
 
 ### 2. Agent-Assisted Planning & Execution Tools
 
@@ -130,7 +131,8 @@
   - Added logic to handle multiple matches or no matches with clear error messages
   - Registered tool in `AgentService`
   - Added unit tests for matching logic
-- [ ] Add agent proactive notifications: "You have 3 high-priority items due today, want to review?"
+- [x] Add agent proactive notifications: "You have 3 high-priority items due today, want to review?" ✅ **COMPLETED** (Dec 24, 2025)
+  - Covered by the Daily Briefing Cron Job which sends proactive emails with prioritized items.
 - [ ] Build agent progress check-ins: periodic "How's tactic Y going?" with context-aware follow-ups
 - [ ] Create traditional Today/Week dashboard views as secondary interface with agent integration
 
@@ -140,7 +142,9 @@
   - Implemented `calculateLeadScore` domain function with weighted logic
   - Handles edge cases: no planned items (100%), deferred items (move to next week), skipped items (0 score)
 - [ ] Create score computation job (runs Monday morning in team timezone)
-- [ ] Build agent-powered alerts: personalized messages explaining score drops with actionable suggestions
+- [x] Build agent-powered alerts: personalized messages explaining score drops with actionable suggestions ✅ **COMPLETED** (Dec 24, 2025)
+  - Integrated `ScoreAnalyst` into Daily Briefing to provide proactive alerts on score health.
+  - Users receive "At Risk" warnings with specific "Recovery Path" actions in their morning email.
 - [x] Add agent score analysis: "Why is my score lower this week?" with drill-down into contributing factors ✅ **COMPLETED** (Dec 24, 2025)
   - Created `ScoreAnalyst` domain service in `src/lib/analysis/score-analyst.ts`
   - Implemented logic to identify "Detractors" (missed high-weight items) and "Contributors"

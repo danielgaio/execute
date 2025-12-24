@@ -52,11 +52,27 @@ export const getDailyBriefingTool: AgentTool = {
               .join("\n")}`
           : "No immediate upcoming items.";
 
+      let analysisMsg = "";
+      if (briefing.scoreAnalysis) {
+        const { score, status, recoveryPath } = briefing.scoreAnalysis;
+        analysisMsg = `\n\n📊 Weekly Score: ${score.toFixed(
+          0
+        )}% (${status.toUpperCase()})`;
+        if (
+          (status === "at-risk" || status === "critical") &&
+          recoveryPath.length > 0
+        ) {
+          analysisMsg += `\n💡 Recovery Path: Complete these to improve:\n${recoveryPath
+            .map((i) => `- ${i.title}`)
+            .join("\n")}`;
+        }
+      }
+
       return {
         success: true,
         data: {
           briefing,
-          message: `Daily Briefing for ${briefing.date}:\n\n${overdueMsg}\n\n${todayMsg}\n\n${upcomingMsg}`,
+          message: `Daily Briefing for ${briefing.date}:\n\n${overdueMsg}\n\n${todayMsg}\n\n${upcomingMsg}${analysisMsg}`,
         },
       };
     } catch (error: any) {
