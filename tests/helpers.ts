@@ -18,17 +18,17 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:5
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!SUPABASE_SERVICE_KEY || !SUPABASE_ANON_KEY) {
-  console.error('\x1b[31m%s\x1b[0m', 'CRITICAL ERROR: Missing Supabase keys for testing.');
-  console.error('Please ensure you have a .env.local file with:');
-  console.error('  NEXT_PUBLIC_SUPABASE_URL (default: http://127.0.0.1:54321)');
-  console.error('  NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  console.error('  SUPABASE_SERVICE_ROLE_KEY');
-  console.error('\nYou can get these keys by running `npx supabase status` if you are using local Supabase.');
-  throw new Error('Missing Supabase keys in environment variables');
+export const supabaseEnvAvailable = Boolean(SUPABASE_SERVICE_KEY && SUPABASE_ANON_KEY);
+
+if (!supabaseEnvAvailable) {
+  // Warn once so local/CI runs understand why RLS suites may be skipped
+  console.warn('\x1b[33m%s\x1b[0m', 'Skipping Supabase RLS tests: missing Supabase keys (NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY).');
 }
 
 export const getAdminClient = () => {
+  if (!supabaseEnvAvailable) {
+    throw new Error('Supabase test environment not configured');
+  }
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: {
       autoRefreshToken: false,
@@ -38,6 +38,9 @@ export const getAdminClient = () => {
 };
 
 export const getAnonClient = () => {
+  if (!supabaseEnvAvailable) {
+    throw new Error('Supabase test environment not configured');
+  }
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       autoRefreshToken: false,
@@ -47,6 +50,9 @@ export const getAnonClient = () => {
 };
 
 export const createTestUser = async (email: string) => {
+  if (!supabaseEnvAvailable) {
+    throw new Error('Supabase test environment not configured');
+  }
   const admin = getAdminClient();
   const password = 'test-password-123';
   

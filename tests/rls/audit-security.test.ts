@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { createTestUser } from '../helpers';
+import { createTestUser, supabaseEnvAvailable } from '../helpers';
 
-describe('RLS: Audit Log Immutability', () => {
+const describeIf = supabaseEnvAvailable ? describe : describe.skip;
+
+describeIf('RLS: Audit Log Immutability', () => {
   let user: any;
   let client: any;
   let org: any;

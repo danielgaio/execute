@@ -31,9 +31,16 @@ The tests need to know how to connect to your local Supabase instance.
 pnpm test
 ```
 
+If Supabase keys are missing, RLS suites will be skipped automatically with a warning.
+
 ### Run RLS Security Tests
 ```bash
 pnpm test:rls
+```
+
+### Run Unit Tests Only (skip RLS)
+```bash
+pnpm test:unit
 ```
 
 ## Troubleshooting

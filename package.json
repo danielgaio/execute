@@ -14,6 +14,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
+    "test:unit": "vitest run --exclude tests/rls/**",
     "test:rls": "vitest run tests/rls"
   },
   "dependencies": {

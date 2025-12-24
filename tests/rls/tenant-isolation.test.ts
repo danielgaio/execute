@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { createTestUser, getAdminClient } from '../helpers';
+import { createTestUser, supabaseEnvAvailable } from '../helpers';
 
-describe('RLS: Multi-Tenant Isolation', () => {
+const describeIf = supabaseEnvAvailable ? describe : describe.skip;
+
+describeIf('RLS: Multi-Tenant Isolation', () => {
   let userA: any;
   let clientA: any;
   let orgA: any;
