@@ -10,12 +10,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  IconButton,
   Tooltip,
 } from "@mui/material";
-import { Add as AddIcon, Edit as EditIcon } from "@mui/icons-material";
+import { Add as AddIcon } from "@mui/icons-material";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import TacticActions from "./tactic-actions";
 
 interface Tactic {
   id: string;
@@ -244,13 +244,7 @@ export default async function TacticsPage() {
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Edit Tactic">
-                        <Link href={`/dashboard/tactics/${t.id}/edit`} passHref>
-                          <IconButton size="small">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Link>
-                      </Tooltip>
+                      <TacticActions tacticId={t.id} tacticTitle={t.title} />
                     </TableCell>
                   </TableRow>
                 );

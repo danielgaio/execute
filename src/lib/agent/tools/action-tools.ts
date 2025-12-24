@@ -727,11 +727,84 @@ export const createVisionTool: AgentTool = {
   },
 };
 
+/**
+ * Delete a tactic
+ */
+export const deleteTacticTool: AgentTool = {
+  name: "delete_tactic",
+  description: "Delete a tactic and all its history. Use with caution.",
+  category: "action",
+  requiresConfirmation: true,
+  parameters: z.object({
+    tactic_id: z.string().describe("The ID of the tactic to delete"),
+    reason: z.string().optional().describe("Reason for deletion"),
+  }),
+  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+    try {
+      // Capture state before deletion for audit
+      const beforeState = await captureEntityState(
+        context.supabase,
+        "tactics",
+        params.tactic_id as string
+      );
+
+      if (!beforeState) throw new Error("Tactic not found");
+
+      const { error } = await context.supabase
+        .from("tactics")
+        .delete()
+        .eq("id", params.tactic_id)
+        .eq("org_id", context.orgId);
+
+      if (error) throw error;
+
+      // Delete embedding
+      try {
+        await context.supabase
+          .from("embeddings")
+          .delete()
+          .match({ org_id: context.orgId })
+          .filter("metadata->>entity_id", "eq", params.tactic_id)
+          .filter("metadata->>entity_type", "eq", "tactic");
+      } catch (e) {
+        console.error("Error deleting embedding:", e);
+      }
+
+      // Log audit
+      await logAgentAction(context.supabase, {
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "delete_tactic",
+        action: "delete",
+        entityType: "tactic",
+        entityId: params.tactic_id as string,
+        beforeState,
+        metadata: {
+          reason: params.reason,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          message: `✅ Deleted tactic: "${(beforeState as any).title}"`,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete tactic",
+      };
+    }
+  },
+};
+
 // Export all action tools
 export const actionTools = [
   createCycleTool,
   createGoalTool,
   createTacticTool,
+  deleteTacticTool,
   markTacticCompleteTool,
   deferTacticTool,
   bulkUpdateTacticsTool,

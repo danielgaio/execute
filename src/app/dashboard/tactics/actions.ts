@@ -143,3 +143,51 @@ export async function updateTactic(tacticId: string, formData: FormData) {
   revalidatePath("/dashboard/tactics");
   redirect("/dashboard/tactics");
 }
+
+export async function deleteTactic(tacticId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Get user's org
+  const { data: membership } = await supabase
+    .from("org_members")
+    .select("org_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) {
+    return { error: "No organization found" };
+  }
+
+  // Delete from DB
+  const { error } = await supabase
+    .from("tactics")
+    .delete()
+    .eq("id", tacticId)
+    .eq("org_id", membership.org_id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  // Delete embedding
+  try {
+    await supabase
+      .from("embeddings")
+      .delete()
+      .match({ org_id: membership.org_id })
+      .filter("metadata->>entity_id", "eq", tacticId)
+      .filter("metadata->>entity_type", "eq", "tactic");
+  } catch (err) {
+    console.error("Failed to delete embedding:", err);
+  }
+
+  revalidatePath("/dashboard/tactics");
+  revalidatePath("/dashboard/goals");
+}
