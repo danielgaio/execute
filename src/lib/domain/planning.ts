@@ -23,18 +23,21 @@ export interface TacticInstance {
  * Designed to be run by a cron job (e.g., every Monday).
  */
 export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
-  // 1. Get all active cycles
+  // 1. Get all active cycles with owner details
   const { data: cycles, error: cycleError } = await supabase
     .from("cycles")
-    .select("id, org_id, start_date, end_date, owner_user_id")
+    .select(`
+      id, org_id, start_date, end_date, owner_user_id, title,
+      owner:owner_user_id ( email, full_name )
+    `)
     .eq("status", "active");
 
   if (cycleError || !cycles) {
     console.error("Error fetching cycles:", cycleError);
-    return { generated: 0, errors: [cycleError] };
+    return { generated: 0, errors: [cycleError], notifications: [] as any[] };
   }
 
-  const results = { generated: 0, errors: [] as any[] };
+  const results = { generated: 0, errors: [] as any[], notifications: [] as any[] };
   const today = new Date();
   const currentWeekStart = getWeekStart(today); // Monday of current week
   const currentWeekStartStr = currentWeekStart.toISOString().split("T")[0];
@@ -45,24 +48,11 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
       const cycleStart = new Date(cycle.start_date);
       const cycleEnd = new Date(cycle.end_date);
       
-      // Simple check: is the current week start within the cycle range?
-      // Or does the cycle overlap with this week?
-      // Let's be permissive: if cycle is active status, and dates overlap.
-      if (currentWeekStart > cycleEnd) {
-        continue; // Cycle ended
-      }
-      // If cycle starts in future, we might still want to generate the first week plan if it's close?
-      // Let's stick to: if currentWeekStart >= cycleStart (or close enough)
-      // For now, strict check:
-      if (currentWeekStart < cycleStart) {
-        // If it starts mid-week, we might want to generate.
-        // Let's check if the week *contains* any cycle days.
-        const currentWeekEnd = new Date(currentWeekStart);
-        currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
-        if (currentWeekEnd < cycleStart) {
-            continue; // Week is entirely before cycle
-        }
-      }
+      if (currentWeekStart > cycleEnd) continue; 
+      
+      const currentWeekEnd = new Date(currentWeekStart);
+      currentWeekEnd.setDate(currentWeekEnd.getDate() + 6);
+      if (currentWeekEnd < cycleStart) continue;
 
       // 2. Create Weekly Plan Record (if not exists)
       const { data: existingPlan } = await supabase
@@ -84,7 +74,6 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
       }
 
       // 3. Get all active tactics for this cycle
-      // We need to join goals to filter by cycle_id
       const { data: tactics, error: tacticsError } = await supabase
         .from("tactics")
         .select("*, goals!inner(cycle_id)")
@@ -93,14 +82,29 @@ export async function generateWeeklyPlansForAllOrgs(supabase: SupabaseClient) {
 
       if (tacticsError) throw tacticsError;
 
+      let tacticsGenerated = 0;
       if (tactics) {
         for (const tactic of tactics) {
-          // Cast to Tactic interface if needed, or ensure query returns compatible shape
-          // TODO: Handle 'custom' recurrence pattern when implemented
            await generateInstancesForTactic(supabase, tactic as any, currentWeekStart);
+           tacticsGenerated++;
         }
       }
       results.generated++;
+
+      // Queue notification if owner has email
+      // @ts-ignore
+      const owner = cycle.owner;
+      if (owner && owner.email) {
+        results.notifications.push({
+          type: 'weekly_plan_ready',
+          email: owner.email,
+          name: owner.full_name || 'User',
+          cycleTitle: cycle.title,
+          weekStart: currentWeekStartStr,
+          itemCount: tacticsGenerated
+        });
+      }
+
     } catch (e) {
       console.error(`Error processing cycle ${cycle.id}:`, e);
       results.errors.push({ cycleId: cycle.id, error: e });
