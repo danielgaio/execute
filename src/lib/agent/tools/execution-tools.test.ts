@@ -1,10 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getDailyBriefingTool } from "./execution-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
+import { predictScoreTool, suggestAdjustmentsTool } from "./analysis-tools";
 
 // Mock dependencies
 vi.mock("@/utils/planning", () => ({
   getWeekStart: vi.fn().mockReturnValue(new Date("2025-01-01")),
+}));
+
+// Mock analysis tools
+vi.mock("./analysis-tools", () => ({
+  predictScoreTool: {
+    handler: vi.fn()
+  },
+  suggestAdjustmentsTool: {
+    handler: vi.fn()
+  }
 }));
 
 describe("Execution Tools", () => {
@@ -17,6 +28,7 @@ describe("Execution Tools", () => {
       select: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
       lt: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
       neq: vi.fn().mockReturnThis(),
       single: vi.fn(),
     };
@@ -31,6 +43,42 @@ describe("Execution Tools", () => {
   });
 
   describe("get_daily_briefing", () => {
+    it("should include predictive analysis in the briefing", async () => {
+      // Create a chainable mock that also resolves to data
+      const mockChain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        lt: vi.fn().mockReturnThis(),
+        gte: vi.fn().mockReturnThis(),
+        neq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ 
+          data: { id: "c1", title: "Q1", start_date: "2025-01-01", end_date: "2025-03-31" }, 
+          error: null 
+        }),
+        then: (resolve: any) => resolve({ data: [], error: null })
+      };
+
+      mockSupabase.from.mockReturnValue(mockChain);
+
+      // Mock Analysis Tools
+      (predictScoreTool.handler as any).mockResolvedValue({
+        success: true,
+        data: { predicted_score: 75, message: "Predicted 75%" }
+      });
+      (suggestAdjustmentsTool.handler as any).mockResolvedValue({
+        success: true,
+        data: { suggestions: ["Fix X"] }
+      });
+
+      const result = await getDailyBriefingTool.handler({}, mockContext);
+
+      expect(result.success).toBe(true);
+      expect(result.data.prediction).toBeDefined();
+      expect(result.data.prediction.predicted_score).toBe(75);
+      expect(result.data.suggestions).toBeDefined();
+      expect(result.data.suggestions.suggestions[0]).toBe("Fix X");
+    });
+
     it("should return briefing with correct score", async () => {
       // Mock Active Cycle
       mockSupabase.single.mockResolvedValueOnce({ 

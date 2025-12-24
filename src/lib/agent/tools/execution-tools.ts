@@ -2,13 +2,14 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getWeekStart } from "@/utils/planning";
 import { calculateLeadScore, type ScorableItem } from "@/lib/domain/scoring";
+import { predictScoreTool, suggestAdjustmentsTool } from "./analysis-tools";
 
 /**
  * Get a daily briefing for the user
  */
 export const getDailyBriefingTool: AgentTool = {
   name: "get_daily_briefing",
-  description: "Get a daily briefing summary. Returns tactics due today, overdue items, and current weekly progress. Use this to help the user focus on execution.",
+  description: "Get a daily briefing summary. Returns tactics due today, overdue items, current weekly progress, AND predictive analysis. Use this to help the user focus on execution.",
   category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
@@ -84,6 +85,20 @@ export const getDailyBriefingTool: AgentTool = {
       // 5. Days remaining in cycle
       const daysRemaining = Math.ceil((new Date(activeCycle.end_date).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24));
 
+      // 6. Predictive Analysis (New)
+      let prediction = null;
+      let suggestions = null;
+
+      try {
+        const predResult = await predictScoreTool.handler({ week_start: weekStart }, context);
+        if (predResult.success) prediction = predResult.data;
+
+        const suggResult = await suggestAdjustmentsTool.handler({ week_start: weekStart }, context);
+        if (suggResult.success) suggestions = suggResult.data;
+      } catch (e) {
+        console.error("Failed to run predictive analysis", e);
+      }
+
       return {
         success: true,
         data: {
@@ -92,6 +107,8 @@ export const getDailyBriefingTool: AgentTool = {
           daysRemaining,
           date: today,
           currentScore,
+          prediction, // Added
+          suggestions, // Added
           todaysTactics: todaysInstances?.map(i => ({
             title: i.tactics?.title,
             status: i.status,
@@ -102,7 +119,7 @@ export const getDailyBriefingTool: AgentTool = {
             dueDate: i.due_date,
             weight: i.tactics?.weight
           })) || [],
-          message: "Daily briefing generated."
+          message: "Daily briefing generated with predictive analysis."
         }
       };
 
