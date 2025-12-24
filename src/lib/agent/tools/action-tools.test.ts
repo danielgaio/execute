@@ -8,7 +8,19 @@ import { SupabaseClient } from "@supabase/supabase-js";
 // Mock dependencies
 vi.mock("../audit-service", () => ({
   logAgentAction: vi.fn(),
-  captureEntityState: vi.fn().mockResolvedValue({ status: "pending" }),
+  captureEntityState: vi.fn().mockImplementation(async (supabase, table, id) => {
+    // Return mock data for the test case
+    if (id === "inst-1") {
+      return {
+        id: "inst-1",
+        tactic_id: "tac-1",
+        due_date: "2025-01-01",
+        week_start: "2024-12-30",
+        tactics: { title: "My Task" }
+      };
+    }
+    return { status: "pending" };
+  }),
 }));
 
 vi.mock("../embedding-service", () => ({
@@ -30,14 +42,20 @@ describe("Action Tools", () => {
 
   beforeEach(() => {
     // Mock Supabase client with chainable methods
-    mockSupabase = {
+    const mockChain = {
       from: vi.fn().mockReturnThis(),
       insert: vi.fn().mockReturnThis(),
       select: vi.fn().mockReturnThis(),
       single: vi.fn(),
       update: vi.fn().mockReturnThis(),
       eq: vi.fn().mockReturnThis(),
+      then: undefined
     };
+    
+    // Make the chain awaitable by default
+    (mockChain as any).then = (resolve: any) => resolve({ data: {}, error: null });
+
+    mockSupabase = mockChain;
 
     mockContext = {
       userId: "user-123",
@@ -46,6 +64,44 @@ describe("Action Tools", () => {
     };
 
     vi.clearAllMocks();
+  });
+
+  describe("defer_tactic", () => {
+    it("should defer the instance AND create a new one for next week", async () => {
+      const instanceId = "inst-1";
+      const tacticId = "tac-1";
+      const currentDueDate = "2025-01-01"; // Wednesday
+      const nextDueDate = "2025-01-08"; // Next Wednesday
+
+      // Mock fetching the instance to be deferred
+      // captureEntityState is mocked, so we don't need to mock supabase select for it.
+
+      // Mock update and insert to return success
+      // Since we use a shared mockChain, we don't need to do anything special 
+      // as long as the chain resolves to { error: null } which is the default.
+
+      const result = await deferTacticTool.handler({ instance_id: instanceId }, mockContext);
+
+      if (!result.success) {
+        console.error("Tool failed with error:", result.error);
+      }
+
+      expect(result.success).toBe(true);
+
+      // Verify Update (Old Instance)
+      expect(mockSupabase.from).toHaveBeenCalledWith("tactic_instances");
+      expect(mockSupabase.update).toHaveBeenCalledWith(expect.objectContaining({
+        status: "deferred"
+      }));
+
+      // Verify Insert (New Instance)
+      expect(mockSupabase.insert).toHaveBeenCalledWith(expect.objectContaining({
+        tactic_id: tacticId,
+        due_date: nextDueDate,
+        planned: true,
+        status: "pending"
+      }));
+    });
   });
 
   describe("create_cycle", () => {

@@ -354,6 +354,33 @@ export const deferTacticTool: AgentTool = {
         params.instance_id as string
       );
 
+      if (!beforeState) throw new Error("Instance not found");
+
+      // 1. Calculate new dates (Next Week)
+      const currentDueDate = new Date(beforeState.due_date);
+      const nextDueDate = new Date(currentDueDate);
+      nextDueDate.setDate(nextDueDate.getDate() + 7);
+      
+      const currentWeekStart = new Date(beforeState.week_start);
+      const nextWeekStart = new Date(currentWeekStart);
+      nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+
+      // 2. Create new instance for next week
+      const { error: insertError } = await context.supabase
+        .from("tactic_instances")
+        .insert({
+          tactic_id: beforeState.tactic_id,
+          org_id: context.orgId,
+          week_start: nextWeekStart.toISOString().split('T')[0],
+          due_date: nextDueDate.toISOString().split('T')[0],
+          planned: true,
+          status: "pending",
+          notes: "Deferred from previous week"
+        });
+
+      if (insertError) throw insertError;
+
+      // 3. Mark old instance as deferred
       const { error } = await context.supabase
         .from("tactic_instances")
         .update({
@@ -386,13 +413,14 @@ export const deferTacticTool: AgentTool = {
         metadata: {
           confirmed: true,
           defer_reason: params.reason,
+          new_due_date: nextDueDate.toISOString().split('T')[0]
         },
       });
 
       return {
         success: true,
         data: {
-          message: "Tactic deferred to next week",
+          message: `Tactic deferred to next week (${nextDueDate.toISOString().split('T')[0]})`,
         },
       };
     } catch (error) {
