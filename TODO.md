@@ -23,12 +23,13 @@
 - [x] Create advanced action tools: `update_tactic` (handles rescheduling and weight updates)
 - [x] Implement agent analysis tools: `analyze_lag_lead_correlation`, `predict_score`, `identify_risks`, `suggest_adjustments`
 - [ ] Add natural language input parsing for tactical attributes (recurrence, weights, due dates)
-- [ ] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
+- [x] Build agent-guided wizard that conversationally walks users through 12-week cycle planning
+- [ ] Implement streaming responses for agent chat to improve perceived performance
 
 ### 3. Database Foundation & Multi-Tenant Security
 
-- [ ] Design and deploy Supabase schema with core tables: `organizations`, `org_members`, `teams`, `team_members`, `cycles`, `visions`, `goals`, `tactics`, `tactic_instances`, `weekly_plans`
-- [ ] Implement comprehensive RLS policies for all tables enforcing org_id/team_id boundaries
+- [x] Design and deploy Supabase schema with core tables: `organizations`, `org_members`, `teams`, `team_members`, `cycles`, `visions`, `goals`, `tactics`, `tactic_instances`, `weekly_plans`
+- [x] Implement comprehensive RLS policies for all tables enforcing org_id/team_id boundaries
 - [x] Write unit tests for RLS policies to prevent cross-tenant data leakage
 - [x] Set up audit_log table with triggers for entity versioning and agent action tracking ✅ **COMPLETED** (Dec 23, 2025)
   - Created comprehensive audit logging system with immutable append-only log
@@ -44,10 +45,10 @@
 
 ### 4. Next.js Project Scaffold & Authentication
 
-- [ ] Initialize Next.js 14+ with App Router, TypeScript, and Material UI
-- [ ] Configure Supabase client integration (environment variables, middleware)
-- [ ] Build authentication flows: sign-up, sign-in, OAuth (Google/Microsoft)
-- [ ] Create protected layout with auth guards and session management
+- [x] Initialize Next.js 14+ with App Router, TypeScript, and Material UI
+- [x] Configure Supabase client integration (environment variables, middleware)
+- [x] Build authentication flows: sign-up, sign-in, OAuth (Google/Microsoft)
+- [x] Create protected layout with auth guards and session management
 
 ### 5. Organization & Team Management
 

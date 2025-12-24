@@ -83,7 +83,7 @@ export function useAgentChat() {
     }
   }, []);
 
-  const sendMessage = async (content: string) => {
+  const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || isLoading) return;
 
     const userMessage: Message = {
@@ -122,9 +122,6 @@ export function useAgentChat() {
 
       if (data.confirmationRequired) {
         setConfirmationRequest(data.confirmationRequired);
-        // Add a temporary assistant message asking for confirmation if not already present
-        // Actually, the server returns the assistant message that requested the tool.
-        // We should display that.
       }
 
       const assistantMessage: Message = {
@@ -146,7 +143,7 @@ export function useAgentChat() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading, conversationId, currentOrg?.id, handleMutatingActions]);
 
   const confirmAction = async () => {
     if (!confirmationRequest || isLoading) return;
@@ -253,21 +250,16 @@ export function useAgentChat() {
 
   // Initialize with greeting or initial message
   useEffect(() => {
-    if (!isInitialized) {
-      if (initialMessage) {
-        // Auto-send initial message
-        sendMessage(initialMessage);
-        clearInitialMessage();
-      } else {
-        loadGreeting();
-      }
+    if (initialMessage) {
+      // Auto-send initial message
+      sendMessage(initialMessage);
+      clearInitialMessage();
+      if (!isInitialized) setIsInitialized(true);
+    } else if (!isInitialized) {
+      loadGreeting();
       setIsInitialized(true);
     }
-  }, [isInitialized, initialMessage, loadGreeting, clearInitialMessage]); // sendMessage is stable but depends on state, so we rely on the fact that we call it with the initial message directly. 
-  // Actually, sendMessage depends on state (conversationId, currentOrg). 
-  // But inside useEffect, we want to trigger it once.
-  // The issue is sendMessage is async and closes over state.
-  // However, for the *first* message, conversationId is null and currentOrg is likely set.
+  }, [isInitialized, initialMessage, loadGreeting, clearInitialMessage, sendMessage]);
   
   return {
     messages,
