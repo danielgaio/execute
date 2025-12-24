@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getWPRContextTool, submitWPRTool } from "./wpr-tools";
 import { SupabaseClient } from "@supabase/supabase-js";
-import * as planningUtils from "@/utils/planning";
+import * as planningDomain from "@/lib/domain/planning";
 
 // Mock dependencies
 vi.mock("@/utils/planning", () => ({
   getWeekStart: vi.fn().mockReturnValue(new Date("2025-01-01")),
-  generateTacticInstancesForWeek: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock("@/lib/domain/planning", () => ({
+  generateInstancesForTacticId: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock("../embedding-service", () => ({
@@ -185,7 +188,7 @@ describe("WPR Tools", () => {
       }
 
       expect(result.success).toBe(true);
-      expect(planningUtils.generateTacticInstancesForWeek).toHaveBeenCalledTimes(2); // Once for each tactic
+      expect(planningDomain.generateInstancesForTacticId).toHaveBeenCalledTimes(2); // Once for each tactic
       expect(result.data.message).toContain("Generated plan for next week");
     });
   });
