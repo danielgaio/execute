@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { getWeekStart } from "@/utils/planning";
+import { ScoreAnalyst, type AnalysisItem } from "../../analysis/score-analyst";
 
 // Type definitions for Supabase query results
 interface TacticInstance {
@@ -89,14 +90,16 @@ interface SimpleTactic {
 export const explainStatusTool: AgentTool = {
   name: "explain_status",
   description:
-    "Explain why the user's current weekly lead score is what it is. Identifies completed vs. pending vs. missed tactics and provides actionable insights.",
+    "Explain why the user's current weekly lead score is what it is. Identifies completed vs. pending vs. missed tactics and provides actionable insights and a recovery plan.",
   category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
     week_start: z
       .string()
       .optional()
-      .describe("Week start date (YYYY-MM-DD). If not provided, uses current week."),
+      .describe(
+        "Week start date (YYYY-MM-DD). If not provided, uses current week."
+      ),
   }),
   handler: async (
     params: { week_start?: string },
@@ -113,11 +116,13 @@ export const explainStatusTool: AgentTool = {
       // Fetch all instances for this week with tactic and goal details
       const { data: instances, error } = await context.supabase
         .from("tactic_instances")
-        .select(`
+        .select(
+          `
           id,
           status,
           due_date,
           week_start,
+          planned,
           tactic_id,
           tactics (
             id,
@@ -129,165 +134,44 @@ export const explainStatusTool: AgentTool = {
               title
             )
           )
-        `)
+        `
+        )
         .eq("org_id", context.orgId)
-        .eq("week_start", weekStart)
-        .eq("planned", true);
+        .eq("week_start", weekStart);
 
       if (error) throw error;
 
-      // Safe type handling with default empty array
-      const typedInstances: TacticInstance[] = (instances || []) as unknown as TacticInstance[];
+      // Map to AnalysisItem
+      const analysisItems: AnalysisItem[] = (instances || []).map((i: any) => ({
+        id: i.id,
+        status: i.status,
+        weight: i.tactics?.weight || 1.0,
+        planned: i.planned,
+        title: i.tactics?.title || "Unknown",
+        goal_title: i.tactics?.goals?.title,
+        due_date: i.due_date,
+      }));
 
-      // Categorize instances
-      const completed: { title: string; weight: number; goal: string }[] = [];
-      const pending: { title: string; weight: number; goal: string; dueDate: string }[] = [];
-      const skipped: { title: string; weight: number; goal: string }[] = [];
-      const deferred: { title: string; weight: number; goal: string }[] = [];
-
-      let totalWeight = 0;
-      let completedWeight = 0;
-
-      const today = new Date().toISOString().split("T")[0];
-
-      typedInstances?.forEach((instance) => {
-        const weight = instance.tactics?.weight || 1.0;
-        const title = instance.tactics?.title || "Unknown Tactic";
-        const goal = instance.tactics?.goals?.title || "Unknown Goal";
-
-        totalWeight += weight;
-
-        if (instance.status === "done") {
-          completedWeight += weight;
-          completed.push({ title, weight, goal });
-        } else if (instance.status === "skipped") {
-          skipped.push({ title, weight, goal });
-        } else if (instance.status === "deferred") {
-          deferred.push({ title, weight, goal });
-        } else {
-          // Pending
-          pending.push({ 
-            title, 
-            weight, 
-            goal, 
-            dueDate: instance.due_date
-          });
-        }
-      });
-
-      const score = totalWeight > 0
-        ? Math.round((completedWeight / totalWeight) * 100)
-        : 100;
-
-      // Group pending by urgency
-      const overdue = pending.filter(p => p.dueDate < today);
-      const dueToday = pending.filter(p => p.dueDate === today);
-      const upcoming = pending.filter(p => p.dueDate > today);
-
-      // Build insights
-      const insights: string[] = [];
-
-      if (score >= 85) {
-        insights.push("Excellent execution! You're on track with your planned tactics.");
-      } else if (score >= 60) {
-        insights.push("Good progress, but there's room for improvement.");
-      } else {
-        insights.push("Your score is below the healthy threshold of 60%. Let's identify what's blocking you.");
-      }
-
-      if (overdue.length > 0) {
-        insights.push(`You have ${overdue.length} overdue tactic(s) impacting your score.`);
-      }
-
-      if (deferred.length > 0) {
-        insights.push(`${deferred.length} tactic(s) were deferred - they still count against this week's score.`);
-      }
-
-      if (skipped.length > 0) {
-        insights.push(`${skipped.length} tactic(s) were skipped - consider if these should be removed from your plan.`);
-      }
-
-      // Identify high-impact pending items
-      const highImpactPending = pending.filter(p => p.weight >= 0.7);
-      if (highImpactPending.length > 0) {
-        insights.push(`High-impact items still pending: ${highImpactPending.map(p => p.title).join(", ")}`);
-      }
+      // Run Analysis
+      const analysis = ScoreAnalyst.analyze(analysisItems);
+      const summary = ScoreAnalyst.generateSummary(analysis);
 
       return {
         success: true,
         data: {
-          score,
           week_start: weekStart,
-          total_planned: typedInstances?.length || 0,
-          breakdown: {
-            completed: {
-              count: completed.length,
-              weight: completedWeight,
-              items: completed,
-            },
-            pending: {
-              count: pending.length,
-              overdue: overdue.length,
-              due_today: dueToday.length,
-              upcoming: upcoming.length,
-              items: pending,
-            },
-            skipped: {
-              count: skipped.length,
-              items: skipped,
-            },
-            deferred: {
-              count: deferred.length,
-              items: deferred,
-            },
-          },
-          insights,
-          recommendations: buildRecommendations(overdue, dueToday, deferred, score),
+          analysis,
+          message: summary,
         },
       };
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to explain status",
+        error: error.message,
       };
     }
   },
 };
-
-function buildRecommendations(
-  overdue: { title: string }[],
-  dueToday: { title: string }[],
-  deferred: { title: string }[],
-  score: number
-): string[] {
-  const recommendations: string[] = [];
-
-  if (overdue.length > 0) {
-    recommendations.push(
-      `Complete overdue items first: ${overdue.slice(0, 3).map(o => `"${o.title}"`).join(", ")}`
-    );
-  }
-
-  if (dueToday.length > 0) {
-    recommendations.push(
-      `Focus on today's due items: ${dueToday.slice(0, 3).map(d => `"${d.title}"`).join(", ")}`
-    );
-  }
-
-  if (deferred.length > 2) {
-    recommendations.push(
-      "Consider reviewing your tactic load - multiple deferrals may indicate overcommitment."
-    );
-  }
-
-  if (score < 60 && overdue.length === 0 && dueToday.length === 0) {
-    recommendations.push(
-      "Your score is low but you have no immediate deadlines. Use this time to catch up on remaining items."
-    );
-  }
-
-  return recommendations;
-}
 
 /**
  * Compare metrics across different cycles
@@ -302,7 +186,9 @@ export const compareCyclesTool: AgentTool = {
     cycle_ids: z
       .array(z.string())
       .optional()
-      .describe("Array of cycle IDs to compare. If not provided, compares the last 2 cycles."),
+      .describe(
+        "Array of cycle IDs to compare. If not provided, compares the last 2 cycles."
+      ),
     metric: z
       .enum(["lead_score", "completion_rate", "goal_progress", "all"])
       .optional()
@@ -367,7 +253,7 @@ export const compareCyclesTool: AgentTool = {
 
       // Fetch tactic instances for each cycle's goals
       const goalIds = typedGoals.map((g) => g.id);
-      
+
       // Handle case when no goals exist
       if (goalIds.length === 0) {
         return {
@@ -392,7 +278,7 @@ export const compareCyclesTool: AgentTool = {
           },
         };
       }
-      
+
       const { data: tacticsData, error: tacticsError } = await context.supabase
         .from("tactics")
         .select("id, goal_id")
@@ -400,7 +286,8 @@ export const compareCyclesTool: AgentTool = {
 
       if (tacticsError) throw tacticsError;
 
-      const typedTactics: SimpleTactic[] = (tacticsData || []) as SimpleTactic[];
+      const typedTactics: SimpleTactic[] = (tacticsData ||
+        []) as SimpleTactic[];
       const tacticIds = typedTactics.map((t) => t.id);
 
       // Handle case when no tactics exist
@@ -410,7 +297,9 @@ export const compareCyclesTool: AgentTool = {
           data: {
             cycles_compared: typedCycles.length,
             comparison: typedCycles.map((cycle) => {
-              const cycleGoals = typedGoals.filter((g) => g.cycle_id === cycle.id);
+              const cycleGoals = typedGoals.filter(
+                (g) => g.cycle_id === cycle.id
+              );
               const goalsByStatus = cycleGoals.reduce((acc, g) => {
                 acc[g.status] = (acc[g.status] || 0) + 1;
                 return acc;
@@ -436,9 +325,11 @@ export const compareCyclesTool: AgentTool = {
         };
       }
 
-      const { data: instancesData, error: instancesError } = await context.supabase
-        .from("tactic_instances")
-        .select(`
+      const { data: instancesData, error: instancesError } =
+        await context.supabase
+          .from("tactic_instances")
+          .select(
+            `
           id,
           status,
           week_start,
@@ -448,20 +339,22 @@ export const compareCyclesTool: AgentTool = {
             weight,
             goal_id
           )
-        `)
-        .in("tactic_id", tacticIds)
-        .eq("planned", true);
+        `
+          )
+          .in("tactic_id", tacticIds)
+          .eq("planned", true);
 
       if (instancesError) throw instancesError;
 
       // Safe type handling
-      const typedInstancesData: CompareCycleInstance[] = (instancesData || []) as unknown as CompareCycleInstance[];
+      const typedInstancesData: CompareCycleInstance[] = (instancesData ||
+        []) as unknown as CompareCycleInstance[];
 
       // Calculate metrics per cycle
       const cycleMetrics = typedCycles.map((cycle) => {
         const cycleGoals = typedGoals.filter((g) => g.cycle_id === cycle.id);
         const cycleGoalIds = cycleGoals.map((g) => g.id);
-        
+
         // Get tactic IDs for this cycle
         const cycleTacticIds = typedTactics
           .filter((t) => cycleGoalIds.includes(t.goal_id))
@@ -484,18 +377,20 @@ export const compareCyclesTool: AgentTool = {
           }
         });
 
-        const avgLeadScore = totalWeight > 0
-          ? Math.round((completedWeight / totalWeight) * 100)
-          : 0;
+        const avgLeadScore =
+          totalWeight > 0
+            ? Math.round((completedWeight / totalWeight) * 100)
+            : 0;
 
         // Calculate completion rate (instances)
         const totalInstances = cycleInstances.length;
         const completedInstances = cycleInstances.filter(
           (i) => i.status === "done"
         ).length;
-        const completionRate = totalInstances > 0
-          ? Math.round((completedInstances / totalInstances) * 100)
-          : 0;
+        const completionRate =
+          totalInstances > 0
+            ? Math.round((completedInstances / totalInstances) * 100)
+            : 0;
 
         // Calculate goal status distribution
         const goalsByStatus = cycleGoals.reduce((acc, g) => {
@@ -524,7 +419,8 @@ export const compareCyclesTool: AgentTool = {
 
       if (cycleMetrics.length >= 2) {
         const [newer, older] = cycleMetrics;
-        const scoreDiff = newer.metrics.avg_lead_score - older.metrics.avg_lead_score;
+        const scoreDiff =
+          newer.metrics.avg_lead_score - older.metrics.avg_lead_score;
 
         if (scoreDiff > 10) {
           insights.push(
@@ -532,17 +428,22 @@ export const compareCyclesTool: AgentTool = {
           );
         } else if (scoreDiff < -10) {
           insights.push(
-            `Lead score decreased by ${Math.abs(scoreDiff)}% compared to the previous cycle.`
+            `Lead score decreased by ${Math.abs(
+              scoreDiff
+            )}% compared to the previous cycle.`
           );
         } else {
           insights.push("Lead score remained relatively stable across cycles.");
         }
 
-        const completionDiff = newer.metrics.completion_rate - older.metrics.completion_rate;
+        const completionDiff =
+          newer.metrics.completion_rate - older.metrics.completion_rate;
         if (completionDiff > 10) {
           insights.push(`Task completion improved by ${completionDiff}%.`);
         } else if (completionDiff < -10) {
-          insights.push(`Task completion decreased by ${Math.abs(completionDiff)}%.`);
+          insights.push(
+            `Task completion decreased by ${Math.abs(completionDiff)}%.`
+          );
         }
       }
 
@@ -557,7 +458,8 @@ export const compareCyclesTool: AgentTool = {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to compare cycles",
+        error:
+          error instanceof Error ? error.message : "Failed to compare cycles",
       };
     }
   },
@@ -576,7 +478,9 @@ export const findBlockersTool: AgentTool = {
     goal_id: z
       .string()
       .optional()
-      .describe("Specific goal ID to analyze. If not provided, analyzes all goals in active cycle."),
+      .describe(
+        "Specific goal ID to analyze. If not provided, analyzes all goals in active cycle."
+      ),
   }),
   handler: async (
     params: { goal_id?: string },
@@ -588,7 +492,7 @@ export const findBlockersTool: AgentTool = {
 
       // Get active cycle if no goal specified
       let goalIds: string[] = [];
-      
+
       if (params.goal_id) {
         goalIds = [params.goal_id];
       } else {
@@ -624,7 +528,8 @@ export const findBlockersTool: AgentTool = {
       // Fetch tactics and instances
       const { data: tactics, error: tacticsError } = await context.supabase
         .from("tactics")
-        .select(`
+        .select(
+          `
           id,
           title,
           weight,
@@ -635,14 +540,16 @@ export const findBlockersTool: AgentTool = {
             title,
             status
           )
-        `)
+        `
+        )
         .in("goal_id", goalIds)
         .eq("status", "active");
 
       if (tacticsError) throw tacticsError;
-      
+
       // Safe type handling
-      const typedTactics: TacticWithGoal[] = (tactics || []) as unknown as TacticWithGoal[];
+      const typedTactics: TacticWithGoal[] = (tactics ||
+        []) as unknown as TacticWithGoal[];
       const tacticIds = typedTactics.map((t) => t.id);
 
       // Handle case when no tactics exist
@@ -665,20 +572,23 @@ export const findBlockersTool: AgentTool = {
 
       const { data: instances, error: instancesError } = await context.supabase
         .from("tactic_instances")
-        .select(`
+        .select(
+          `
           id,
           status,
           due_date,
           week_start,
           tactic_id
-        `)
+        `
+        )
         .in("tactic_id", tacticIds)
         .eq("planned", true);
 
       if (instancesError) throw instancesError;
 
       // Safe type handling
-      const typedInstances: FindBlockersInstance[] = (instances || []) as FindBlockersInstance[];
+      const typedInstances: FindBlockersInstance[] = (instances ||
+        []) as FindBlockersInstance[];
 
       // Analyze blockers
       const blockers: {
@@ -705,7 +615,8 @@ export const findBlockersTool: AgentTool = {
           severity: "high",
           description: `${overdueInstances.length} task(s) are past their due date.`,
           items: [...new Set(overdueItems)], // Unique items
-          recommendation: "Prioritize completing or rescheduling these items immediately.",
+          recommendation:
+            "Prioritize completing or rescheduling these items immediately.",
         });
       }
 
@@ -715,10 +626,12 @@ export const findBlockersTool: AgentTool = {
 
       typedInstances.forEach((i) => {
         if (i.status === "skipped") {
-          tacticSkipCount[i.tactic_id] = (tacticSkipCount[i.tactic_id] || 0) + 1;
+          tacticSkipCount[i.tactic_id] =
+            (tacticSkipCount[i.tactic_id] || 0) + 1;
         }
         if (i.status === "deferred") {
-          tacticDeferCount[i.tactic_id] = (tacticDeferCount[i.tactic_id] || 0) + 1;
+          tacticDeferCount[i.tactic_id] =
+            (tacticDeferCount[i.tactic_id] || 0) + 1;
         }
       });
 
@@ -735,7 +648,8 @@ export const findBlockersTool: AgentTool = {
           severity: "medium",
           description: `${frequentlySkipped.length} tactic(s) have been skipped multiple times.`,
           items: frequentlySkipped,
-          recommendation: "Consider removing these from your plan or reassessing their value.",
+          recommendation:
+            "Consider removing these from your plan or reassessing their value.",
         });
       }
 
@@ -752,7 +666,8 @@ export const findBlockersTool: AgentTool = {
           severity: "medium",
           description: `${frequentlyDeferred.length} tactic(s) keep getting deferred.`,
           items: frequentlyDeferred,
-          recommendation: "Review capacity - these may need to be rescheduled or delegated.",
+          recommendation:
+            "Review capacity - these may need to be rescheduled or delegated.",
         });
       }
 
@@ -772,7 +687,8 @@ export const findBlockersTool: AgentTool = {
           severity: "high",
           description: `${uniqueAtRiskGoals.length} goal(s) are at risk or off track.`,
           items: uniqueAtRiskGoals,
-          recommendation: "Review goal progress and adjust tactics or targets as needed.",
+          recommendation:
+            "Review goal progress and adjust tactics or targets as needed.",
         });
       }
 
@@ -786,16 +702,21 @@ export const findBlockersTool: AgentTool = {
         return diffWeeks <= recentWeeks;
       });
 
-      const completedRecent = recentInstances.filter((i) => i.status === "done").length;
+      const completedRecent = recentInstances.filter(
+        (i) => i.status === "done"
+      ).length;
       const totalRecent = recentInstances.length;
 
       if (totalRecent > 0 && completedRecent / totalRecent < 0.3) {
         blockers.push({
           type: "Low Engagement",
           severity: "medium",
-          description: `Only ${Math.round((completedRecent / totalRecent) * 100)}% completion rate in the last ${recentWeeks} weeks.`,
+          description: `Only ${Math.round(
+            (completedRecent / totalRecent) * 100
+          )}% completion rate in the last ${recentWeeks} weeks.`,
           items: [],
-          recommendation: "Consider reducing planned items or addressing time management issues.",
+          recommendation:
+            "Consider reducing planned items or addressing time management issues.",
         });
       }
 
@@ -812,17 +733,19 @@ export const findBlockersTool: AgentTool = {
         data: {
           summary,
           blockers,
-          overall_health: blockers.length === 0
-            ? "healthy"
-            : summary.high_severity > 0
-            ? "critical"
-            : "needs_attention",
+          overall_health:
+            blockers.length === 0
+              ? "healthy"
+              : summary.high_severity > 0
+              ? "critical"
+              : "needs_attention",
         },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to find blockers",
+        error:
+          error instanceof Error ? error.message : "Failed to find blockers",
       };
     }
   },
@@ -841,7 +764,9 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
     goal_id: z
       .string()
       .optional()
-      .describe("Specific goal ID to analyze. If not provided, analyzes all goals."),
+      .describe(
+        "Specific goal ID to analyze. If not provided, analyzes all goals."
+      ),
     cycle_id: z
       .string()
       .optional()
@@ -897,16 +822,18 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
 
       // Get tactics for each goal
       const goalIds = typedGoals.map((g) => g.id);
-      
+
       const { data: tactics } = await context.supabase
         .from("tactics")
-        .select(`
+        .select(
+          `
           id,
           title,
           weight,
           goal_id,
           status
-        `)
+        `
+        )
         .in("goal_id", goalIds);
 
       const tacticIds = tactics?.map((t) => t.id) || [];
@@ -914,12 +841,14 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
       // Get instances
       const { data: instances } = await context.supabase
         .from("tactic_instances")
-        .select(`
+        .select(
+          `
           id,
           status,
           tactic_id,
           week_start
-        `)
+        `
+        )
         .in("tactic_id", tacticIds)
         .eq("planned", true);
 
@@ -927,7 +856,8 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
       const goalAnalysis = typedGoals.map((goal) => {
         const goalTactics = tactics?.filter((t) => t.goal_id === goal.id) || [];
         const goalTacticIds = goalTactics.map((t) => t.id);
-        const goalInstances = instances?.filter((i) => goalTacticIds.includes(i.tactic_id)) || [];
+        const goalInstances =
+          instances?.filter((i) => goalTacticIds.includes(i.tactic_id)) || [];
 
         // Calculate lead score for this goal
         let totalWeight = 0;
@@ -942,32 +872,41 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
           }
         });
 
-        const leadScore = totalWeight > 0
-          ? Math.round((completedWeight / totalWeight) * 100)
-          : 0;
+        const leadScore =
+          totalWeight > 0
+            ? Math.round((completedWeight / totalWeight) * 100)
+            : 0;
 
         // Calculate progress toward target (if applicable)
-        const progress = goal.target > 0
-          ? Math.round(((goal.baseline || 0) / goal.target) * 100)
-          : 0;
+        const progress =
+          goal.target > 0
+            ? Math.round(((goal.baseline || 0) / goal.target) * 100)
+            : 0;
 
         // Identify highest-performing tactics
-        const tacticPerformance = goalTactics.map((tactic) => {
-          const tacticInstances = goalInstances.filter((i) => i.tactic_id === tactic.id);
-          const completed = tacticInstances.filter((i) => i.status === "done").length;
-          const total = tacticInstances.length;
-          const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const tacticPerformance = goalTactics
+          .map((tactic) => {
+            const tacticInstances = goalInstances.filter(
+              (i) => i.tactic_id === tactic.id
+            );
+            const completed = tacticInstances.filter(
+              (i) => i.status === "done"
+            ).length;
+            const total = tacticInstances.length;
+            const completionRate =
+              total > 0 ? Math.round((completed / total) * 100) : 0;
 
-          return {
-            tactic_id: tactic.id,
-            title: tactic.title,
-            weight: tactic.weight,
-            completion_rate: completionRate,
-            completed_count: completed,
-            total_count: total,
-            impact_score: completionRate * (tactic.weight || 1), // Weighted impact
-          };
-        }).sort((a, b) => b.impact_score - a.impact_score);
+            return {
+              tactic_id: tactic.id,
+              title: tactic.title,
+              weight: tactic.weight,
+              completion_rate: completionRate,
+              completed_count: completed,
+              total_count: total,
+              impact_score: completionRate * (tactic.weight || 1), // Weighted impact
+            };
+          })
+          .sort((a, b) => b.impact_score - a.impact_score);
 
         return {
           goal_id: goal.id,
@@ -980,7 +919,9 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
           progress_to_target: progress,
           tactics_count: goalTactics.length,
           top_performing_tactics: tacticPerformance.slice(0, 3),
-          underperforming_tactics: tacticPerformance.filter((t) => t.completion_rate < 50).slice(0, 3),
+          underperforming_tactics: tacticPerformance
+            .filter((t) => t.completion_rate < 50)
+            .slice(0, 3),
         };
       });
 
@@ -1025,8 +966,10 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
           analysis: goalAnalysis,
           insights,
           recommendations: [
-            misaligned.length > 0 && "Review tactics for misaligned goals - high execution but low outcome may indicate wrong activities.",
-            underperforming.length > 0 && "Address execution gaps in underperforming goals - these need immediate attention.",
+            misaligned.length > 0 &&
+              "Review tactics for misaligned goals - high execution but low outcome may indicate wrong activities.",
+            underperforming.length > 0 &&
+              "Address execution gaps in underperforming goals - these need immediate attention.",
             "Consider increasing weight on tactics that correlate with goal progress.",
           ].filter(Boolean),
         },
@@ -1034,7 +977,10 @@ export const analyzeLagLeadCorrelationTool: AgentTool = {
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to analyze correlation",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to analyze correlation",
       };
     }
   },
@@ -1060,32 +1006,36 @@ export const predictScoreTool: AgentTool = {
     context: ToolContext
   ): Promise<ToolResult> => {
     try {
-      const weekStart = params.week_start || getWeekStart().toISOString().split("T")[0];
+      const weekStart =
+        params.week_start || getWeekStart().toISOString().split("T")[0];
       const today = new Date().toISOString().split("T")[0];
 
       // 1. Get current week's instances
-      const { data: currentInstances, error: currentError } = await context.supabase
-        .from("tactic_instances")
-        .select(`
+      const { data: currentInstances, error: currentError } =
+        await context.supabase
+          .from("tactic_instances")
+          .select(
+            `
           id, status, due_date,
           tactics ( weight )
-        `)
-        .eq("org_id", context.orgId)
-        .eq("week_start", weekStart)
-        .eq("planned", true);
+        `
+          )
+          .eq("org_id", context.orgId)
+          .eq("week_start", weekStart)
+          .eq("planned", true);
 
       if (currentError) throw currentError;
 
       const instances = (currentInstances || []) as any[];
-      
+
       if (instances.length === 0) {
         return {
           success: true,
           data: {
             message: "No planned tactics found for this week.",
             predicted_score: 100, // Default if nothing planned
-            confidence: "low"
-          }
+            confidence: "low",
+          },
         };
       }
 
@@ -1095,13 +1045,13 @@ export const predictScoreTool: AgentTool = {
       let pendingWeight = 0;
       let overdueWeight = 0;
 
-      instances.forEach(i => {
+      instances.forEach((i) => {
         const weight = i.tactics?.weight || 1.0;
         totalWeight += weight;
-        
-        if (i.status === 'done') {
+
+        if (i.status === "done") {
           completedWeight += weight;
-        } else if (i.status === 'pending') {
+        } else if (i.status === "pending") {
           pendingWeight += weight;
           if (i.due_date < today) {
             overdueWeight += weight;
@@ -1109,9 +1059,8 @@ export const predictScoreTool: AgentTool = {
         }
       });
 
-      const currentScore = totalWeight > 0 
-        ? Math.round((completedWeight / totalWeight) * 100) 
-        : 0;
+      const currentScore =
+        totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
 
       // 3. Get historical completion rate (last 4 weeks)
       // We'll use a simplified query for speed
@@ -1129,25 +1078,31 @@ export const predictScoreTool: AgentTool = {
 
       let historicalRate = 0.8; // Default optimism
       if (history && history.length > 0) {
-        const completed = history.filter((h: any) => h.status === 'done').length;
+        const completed = history.filter(
+          (h: any) => h.status === "done"
+        ).length;
         historicalRate = completed / history.length;
       }
 
       // 4. Predict
       // Prediction = Current Score + (Pending Weight * Historical Rate) / Total Weight
       // We discount overdue items heavily (50% of historical rate)
-      const predictedAdditionalWeight = 
-        ((pendingWeight - overdueWeight) * historicalRate) + 
-        (overdueWeight * (historicalRate * 0.5));
-      
-      const predictedTotalCompleted = completedWeight + predictedAdditionalWeight;
-      const predictedScore = totalWeight > 0
-        ? Math.round((predictedTotalCompleted / totalWeight) * 100)
-        : 0;
+      const predictedAdditionalWeight =
+        (pendingWeight - overdueWeight) * historicalRate +
+        overdueWeight * (historicalRate * 0.5);
+
+      const predictedTotalCompleted =
+        completedWeight + predictedAdditionalWeight;
+      const predictedScore =
+        totalWeight > 0
+          ? Math.round((predictedTotalCompleted / totalWeight) * 100)
+          : 0;
 
       // 5. Confidence Level
       // Higher confidence if more of the week is already done
-      const daysPassed = (new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24);
+      const daysPassed =
+        (new Date().getTime() - new Date(weekStart).getTime()) /
+        (1000 * 60 * 60 * 24);
       let confidence = "medium";
       if (daysPassed > 5) confidence = "high";
       if (daysPassed < 2) confidence = "low";
@@ -1163,19 +1118,21 @@ export const predictScoreTool: AgentTool = {
             total_weight: totalWeight,
             completed_weight: completedWeight,
             pending_weight: pendingWeight,
-            overdue_weight: overdueWeight
+            overdue_weight: overdueWeight,
           },
-          message: `Based on your historical completion rate of ${Math.round(historicalRate * 100)}%, I predict you'll finish the week with a score of ${predictedScore}%.`
-        }
+          message: `Based on your historical completion rate of ${Math.round(
+            historicalRate * 100
+          )}%, I predict you'll finish the week with a score of ${predictedScore}%.`,
+        },
       };
-
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to predict score"
+        error:
+          error instanceof Error ? error.message : "Failed to predict score",
       };
     }
-  }
+  },
 };
 
 /**
@@ -1198,16 +1155,19 @@ export const suggestAdjustmentsTool: AgentTool = {
     context: ToolContext
   ): Promise<ToolResult> => {
     try {
-      const weekStart = params.week_start || getWeekStart().toISOString().split("T")[0];
+      const weekStart =
+        params.week_start || getWeekStart().toISOString().split("T")[0];
       const today = new Date().toISOString().split("T")[0];
 
       // 1. Get current week's instances
       const { data: currentInstances, error } = await context.supabase
         .from("tactic_instances")
-        .select(`
+        .select(
+          `
           id, status, due_date, title,
           tactics ( id, title, weight )
-        `)
+        `
+        )
         .eq("org_id", context.orgId)
         .eq("week_start", weekStart)
         .eq("planned", true);
@@ -1215,15 +1175,15 @@ export const suggestAdjustmentsTool: AgentTool = {
       if (error) throw error;
 
       const instances = (currentInstances || []) as any[];
-      const pendingInstances = instances.filter(i => i.status === 'pending');
+      const pendingInstances = instances.filter((i) => i.status === "pending");
 
       if (pendingInstances.length === 0) {
         return {
           success: true,
           data: {
             message: "No pending tasks to adjust. You're all set!",
-            suggestions: []
-          }
+            suggestions: [],
+          },
         };
       }
 
@@ -1233,10 +1193,10 @@ export const suggestAdjustmentsTool: AgentTool = {
       const overdueTasks: any[] = [];
 
       // 2. Categorize tasks
-      pendingInstances.forEach(i => {
+      pendingInstances.forEach((i) => {
         const weight = i.tactics?.weight || 1.0;
         const title = i.tactics?.title || "Unknown Task";
-        
+
         if (i.due_date < today) {
           overdueTasks.push({ title, id: i.id, weight });
         }
@@ -1252,7 +1212,7 @@ export const suggestAdjustmentsTool: AgentTool = {
 
       // A. Overdue Management
       if (overdueTasks.length > 0) {
-        const titles = overdueTasks.map(t => `"${t.title}"`).join(", ");
+        const titles = overdueTasks.map((t) => `"${t.title}"`).join(", ");
         suggestions.push(
           `You have ${overdueTasks.length} overdue tasks (${titles}). Consider rescheduling them to a specific day later this week or deferring them if they are no longer critical.`
         );
@@ -1293,18 +1253,20 @@ export const suggestAdjustmentsTool: AgentTool = {
           analysis: {
             pending_count: pendingInstances.length,
             overdue_count: overdueTasks.length,
-            high_impact_count: highImpactTasks.length
-          }
-        }
+            high_impact_count: highImpactTasks.length,
+          },
+        },
       };
-
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to generate suggestions"
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate suggestions",
       };
     }
-  }
+  },
 };
 
 /**
@@ -1325,10 +1287,12 @@ export const getDailyBriefingTool: AgentTool = {
       // 1. Get all instances for the week (for scoring)
       const { data: weekInstances, error: weekError } = await context.supabase
         .from("tactic_instances")
-        .select(`
+        .select(
+          `
           id, status, due_date, planned,
           tactics ( id, title, weight )
-        `)
+        `
+        )
         .eq("org_id", context.orgId)
         .eq("week_start", weekStart)
         .eq("planned", true);
@@ -1342,11 +1306,11 @@ export const getDailyBriefingTool: AgentTool = {
       let skippedWeight = 0;
 
       const instances = (weekInstances || []) as any[];
-      
+
       instances.forEach((inst) => {
         const weight = inst.tactics?.weight || 1.0;
         totalWeight += weight;
-        
+
         if (inst.status === "done") {
           completedWeight += weight;
         } else if (inst.status === "pending") {
@@ -1356,10 +1320,14 @@ export const getDailyBriefingTool: AgentTool = {
         }
       });
 
-      const currentScore = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
+      const currentScore =
+        totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
       // Predicted score = (Completed + Pending) / Total. (Assumes all pending will be done)
       // If skipped, that weight is lost.
-      const predictedScore = totalWeight > 0 ? Math.round(((completedWeight + pendingWeight) / totalWeight) * 100) : 100;
+      const predictedScore =
+        totalWeight > 0
+          ? Math.round(((completedWeight + pendingWeight) / totalWeight) * 100)
+          : 100;
 
       // 3. Get Today's Focus & Overdue
       const todaysFocus: any[] = [];
@@ -1372,7 +1340,7 @@ export const getDailyBriefingTool: AgentTool = {
           id: inst.id,
           title: inst.tactics?.title,
           weight: inst.tactics?.weight,
-          due_date: inst.due_date
+          due_date: inst.due_date,
         };
 
         if (inst.due_date === today) {
@@ -1385,16 +1353,27 @@ export const getDailyBriefingTool: AgentTool = {
       // 4. Generate Suggestions
       const suggestions: string[] = [];
       if (predictedScore < 85) {
-        suggestions.push(`You are projected to finish at ${predictedScore}%. To fix this, you cannot afford to skip any more tasks.`);
+        suggestions.push(
+          `You are projected to finish at ${predictedScore}%. To fix this, you cannot afford to skip any more tasks.`
+        );
         if (skippedWeight > 0) {
-           suggestions.push(`You have already skipped ${(skippedWeight/totalWeight*100).toFixed(0)}% of your planned impact.`);
+          suggestions.push(
+            `You have already skipped ${(
+              (skippedWeight / totalWeight) *
+              100
+            ).toFixed(0)}% of your planned impact.`
+          );
         }
       } else {
-        suggestions.push(`You're on track for a strong week (${predictedScore}%).`);
+        suggestions.push(
+          `You're on track for a strong week (${predictedScore}%).`
+        );
       }
 
       if (overdue.length > 0) {
-        suggestions.push(`You have ${overdue.length} overdue items. Clear these first.`);
+        suggestions.push(
+          `You have ${overdue.length} overdue items. Clear these first.`
+        );
       }
 
       return {
@@ -1405,25 +1384,27 @@ export const getDailyBriefingTool: AgentTool = {
           scores: {
             current: currentScore,
             predicted: predictedScore,
-            total_weight: totalWeight
+            total_weight: totalWeight,
           },
           focus: {
             today: todaysFocus,
             overdue: overdue,
-            count: todaysFocus.length + overdue.length
+            count: todaysFocus.length + overdue.length,
           },
           suggestions,
-          message: `Daily Briefing: Current Score ${currentScore}%, Projected ${predictedScore}%. ${todaysFocus.length} items due today.`
-        }
+          message: `Daily Briefing: Current Score ${currentScore}%, Projected ${predictedScore}%. ${todaysFocus.length} items due today.`,
+        },
       };
-
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to generate briefing"
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate briefing",
       };
     }
-  }
+  },
 };
 
 // Export all analysis tools

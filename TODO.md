@@ -141,7 +141,12 @@
   - Handles edge cases: no planned items (100%), deferred items (move to next week), skipped items (0 score)
 - [ ] Create score computation job (runs Monday morning in team timezone)
 - [ ] Build agent-powered alerts: personalized messages explaining score drops with actionable suggestions
-- [ ] Add agent score analysis: "Why is my score lower this week?" with drill-down into contributing factors
+- [x] Add agent score analysis: "Why is my score lower this week?" with drill-down into contributing factors ✅ **COMPLETED** (Dec 24, 2025)
+  - Created `ScoreAnalyst` domain service in `src/lib/analysis/score-analyst.ts`
+  - Implemented logic to identify "Detractors" (missed high-weight items) and "Contributors"
+  - Added "Recovery Path" algorithm to suggest minimum actions to reach 85% score
+  - Updated `explain_status` agent tool to use the new service
+  - Added unit tests for analysis logic
 - [x] Expose scoring APIs for analytics and WPR integration ✅ **COMPLETED** (Dec 24, 2025)
   - Created `get_weekly_score` agent tool
   - Supports calculating score for any past/present/future week
