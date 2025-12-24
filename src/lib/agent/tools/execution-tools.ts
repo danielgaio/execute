@@ -47,7 +47,8 @@ export const getDailyBriefingTool: AgentTool = {
         `)
         .eq("org_id", context.orgId)
         .eq("due_date", today)
-        .eq("planned", true);
+        .eq("planned", true)
+        .neq("status", "deferred");
 
       // 3. Get Overdue Tactics (All past uncompleted instances in this cycle)
       const { data: weekInstances } = await context.supabase
@@ -60,7 +61,8 @@ export const getDailyBriefingTool: AgentTool = {
         .eq("planned", true)
         .lt("due_date", today)
         .gte("due_date", activeCycle.start_date)
-        .neq("status", "done");
+        .neq("status", "done")
+        .neq("status", "deferred");
 
       // 4. Calculate Current Weekly Score
       const { data: allWeekInstances } = await context.supabase

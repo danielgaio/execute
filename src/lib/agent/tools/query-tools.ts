@@ -278,6 +278,9 @@ export const getTodayFocusTool: AgentTool = {
         query = query.neq("status", "done");
       }
 
+      // Exclude deferred items as they are no longer actionable today
+      query = query.neq("status", "deferred");
+
       const { data, error } = await query;
 
       if (error) throw error;
@@ -359,6 +362,7 @@ export const getWeeklyScoreTool: AgentTool = {
       let completedWeight = 0;
       const completed: unknown[] = [];
       const pending: unknown[] = [];
+      const deferred: unknown[] = [];
 
       type InstanceWithTactics = {
         status: string;
@@ -375,6 +379,8 @@ export const getWeeklyScoreTool: AgentTool = {
           completed.push(instance);
         } else if (typedInstance.status === "pending") {
           pending.push(instance);
+        } else if (typedInstance.status === "deferred") {
+          deferred.push(instance);
         }
       });
 
@@ -391,10 +397,12 @@ export const getWeeklyScoreTool: AgentTool = {
           total_planned: instances?.length || 0,
           completed_count: completed.length,
           pending_count: pending.length,
+          deferred_count: deferred.length,
           total_weight: totalWeight,
           completed_weight: completedWeight,
           completed_items: completed,
           pending_items: pending,
+          deferred_items: deferred,
         },
       };
     } catch (error) {
