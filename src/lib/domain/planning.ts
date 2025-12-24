@@ -37,7 +37,6 @@ export async function generateInstancesForTactic(
 
   if (existing && existing.length > 0) {
     // Already generated for this week. Skip.
-    // In a more complex version, we might update/sync, but for now, skip.
     return;
   }
 
@@ -75,10 +74,35 @@ export async function generateInstancesForTactic(
         status: "pending",
       });
     }
+  } else if (tactic.recurrence === "one_off") {
+    // For one-off, we check if ANY instance exists globally (not just this week)
+    // But since we are in 'generateInstancesForTactic' which is usually called for a specific week,
+    // we need to be careful.
+    // Ideally, we check if it has EVER been scheduled.
+    
+    const { count } = await supabase
+      .from("tactic_instances")
+      .select("id", { count: 'exact', head: true })
+      .eq("tactic_id", tactic.id);
+    
+    if (count === 0) {
+      // Never scheduled. Schedule it for this week.
+      const dueDays = tactic.due_days && tactic.due_days.length > 0 ? tactic.due_days : [5]; // Default Friday
+      const dayIndex = dueDays[0]; // Take the first one
+      const daysToAdd = dayIndex - 1;
+      const dueDate = new Date(weekStart);
+      dueDate.setDate(dueDate.getDate() + daysToAdd);
+
+      instances.push({
+        tactic_id: tactic.id,
+        org_id: tactic.org_id,
+        week_start: weekStartStr,
+        due_date: dueDate.toISOString().split("T")[0],
+        planned: true,
+        status: "pending",
+      });
+    }
   }
-  // 'one_off' tactics are usually manually scheduled or have a specific date, 
-  // so we might not auto-generate them unless they have a specific logic. 
-  // For now, we skip 'one_off' in auto-generation.
 
   if (instances.length > 0) {
     const { error } = await supabase.from("tactic_instances").insert(instances);

@@ -100,6 +100,71 @@ describe("Planning Domain Service", () => {
 
       expect(mockSupabase.insert).not.toHaveBeenCalled();
     });
+
+    it("should generate instance for one_off tactic if none exist", async () => {
+      const tactic: Tactic = {
+        id: "t3",
+        title: "Launch",
+        recurrence: "one_off",
+        org_id: "org-1",
+        due_days: [3] // Wednesday
+      };
+
+      // Mock global check (count = 0)
+      // The code calls: select('id', {count}).eq()...
+      // We need to mock this specific chain.
+      
+      // Reset mocks to be clean
+      vi.clearAllMocks();
+      
+      const chain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        then: (resolve: any) => resolve({ data: [], count: 0, error: null }) // Default: no data, count 0
+      };
+      
+      mockSupabase = {
+        from: vi.fn().mockReturnValue(chain),
+        ...chain
+      };
+
+      await generateInstancesForTactic(mockSupabase as unknown as SupabaseClient, tactic, weekStart);
+
+      expect(mockSupabase.insert).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          tactic_id: "t3",
+          due_date: "2025-01-08", // Wednesday
+          planned: true
+        })
+      ]));
+    });
+
+    it("should skip one_off tactic if instance already exists globally", async () => {
+      const tactic: Tactic = {
+        id: "t3",
+        title: "Launch",
+        recurrence: "one_off",
+        org_id: "org-1"
+      };
+
+      // Mock global check (count = 1)
+      const chain = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        then: (resolve: any) => resolve({ data: [], count: 1, error: null }) // Count 1
+      };
+      
+      mockSupabase = {
+        from: vi.fn().mockReturnValue(chain),
+        ...chain
+      };
+
+      await generateInstancesForTactic(mockSupabase as unknown as SupabaseClient, tactic, weekStart);
+
+      expect(mockSupabase.insert).not.toHaveBeenCalled();
+    });
   });
 
   describe("generateWeeklyPlan", () => {
