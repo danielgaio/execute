@@ -130,12 +130,17 @@
 
 ### 9. Lead Score Calculation Engine with Agent Intelligence
 
-- [ ] Implement weekly lead score formula: (completed × weight) / (planned × weight) × 100%
-- [ ] Handle edge cases: no planned instances (100%), deferred items, skipped with override
+- [x] Implement weekly lead score formula: (completed × weight) / (planned × weight) × 100% ✅ **COMPLETED** (Dec 24, 2025)
+  - Implemented `calculateLeadScore` domain function with weighted logic
+  - Handles edge cases: no planned items (100%), deferred items (move to next week), skipped items (0 score)
 - [ ] Create score computation job (runs Monday morning in team timezone)
 - [ ] Build agent-powered alerts: personalized messages explaining score drops with actionable suggestions
 - [ ] Add agent score analysis: "Why is my score lower this week?" with drill-down into contributing factors
-- [ ] Expose scoring APIs for analytics and WPR integration
+- [x] Expose scoring APIs for analytics and WPR integration ✅ **COMPLETED** (Dec 24, 2025)
+  - Created `get_weekly_score` agent tool
+  - Supports calculating score for any past/present/future week
+  - Returns detailed breakdown (total items, completed items, weights)
+  - Supports team-level filtering
 
 ### 10. Agent-Enhanced WPR Flow
 
