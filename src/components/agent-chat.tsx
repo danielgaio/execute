@@ -27,6 +27,8 @@ import SmartToyIcon from "@mui/icons-material/SmartToy";
 import PersonIcon from "@mui/icons-material/Person";
 import CloseIcon from "@mui/icons-material/Close";
 import { useAgentChat } from "@/hooks/use-agent-chat";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface AgentChatProps {
   onClose?: () => void;
@@ -261,17 +263,56 @@ export default function AgentChat({ onClose }: AgentChatProps) {
                     message.role === "user"
                       ? "primary.contrastText"
                       : "text.primary",
+                  "& p": { m: 0, mb: 1 },
+                  "& p:last-child": { mb: 0 },
+                  "& ul, & ol": { m: 0, pl: 2, mb: 1 },
+                  "& pre": { 
+                    bgcolor: "rgba(0,0,0,0.1)", 
+                    p: 1, 
+                    borderRadius: 1, 
+                    overflowX: "auto",
+                    fontFamily: "monospace",
+                    fontSize: "0.85rem"
+                  },
+                  "& code": {
+                    bgcolor: "rgba(0,0,0,0.1)",
+                    px: 0.5,
+                    borderRadius: 0.5,
+                    fontFamily: "monospace",
+                    fontSize: "0.85rem"
+                  },
+                  "& table": {
+                    borderCollapse: "collapse",
+                    width: "100%",
+                    mb: 1,
+                    fontSize: "0.875rem"
+                  },
+                  "& th, & td": {
+                    border: "1px solid rgba(0,0,0,0.1)",
+                    p: 0.5,
+                    textAlign: "left"
+                  },
+                  "& th": {
+                    bgcolor: "rgba(0,0,0,0.05)",
+                    fontWeight: "bold"
+                  }
                 }}
               >
-                <Typography
-                  variant="body1"
-                  sx={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {message.content}
-                </Typography>
+                {message.role === "user" ? (
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {message.content}
+                  </Typography>
+                ) : (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                )}
               </Paper>
 
               {/* Tool calls */}
