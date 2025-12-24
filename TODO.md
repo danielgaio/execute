@@ -111,7 +111,12 @@
 
 ### 8. Agent-Powered Daily & Weekly Execution
 
-- [ ] Build agent-first daily briefing: "What should I focus on today?" with prioritized recommendations
+- [x] Build agent-first daily briefing: "What should I focus on today?" with prioritized recommendations ✅ **COMPLETED** (Dec 24, 2025)
+  - Created `get_daily_briefing` tool in `briefing-tools.ts`
+  - Implemented logic to fetch Overdue, Today, and Upcoming items
+  - Added prioritization logic (Overdue + High Weight)
+  - Registered tool in `AgentService`
+  - Added unit tests
 - [ ] Create agent-driven weekly planning: agent pre-populates and explains weekly commitments
 - [ ] Implement conversational task completion: users can say "Mark tactic X done, took 2 hours, good results"
 - [ ] Add agent proactive notifications: "You have 3 high-priority items due today, want to review?"

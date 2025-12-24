@@ -14,6 +14,7 @@ import { planningTools } from "./tools/planning-tools";
 import { wprTools } from "./tools/wpr-tools";
 import { executionTools } from "./tools/execution-tools";
 import { teamTools } from "./tools/team-tools";
+import { getDailyBriefingTool } from "./tools/briefing-tools";
 import { embeddingService } from "./embedding-service";
 import { contextBuilder } from "./context-builder";
 import { logAgentAction } from "./audit-service";
@@ -42,6 +43,7 @@ export class AgentService {
       ...wprTools,
       ...executionTools,
       ...teamTools,
+      getDailyBriefingTool,
     ];
 
     for (const tool of allTools) {
