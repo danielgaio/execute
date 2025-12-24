@@ -217,6 +217,12 @@ export const submitWPRTool: AgentTool = {
     lag_status: z
       .string()
       .describe("Summary of goal status (e.g., 'All on track')."),
+    pending_action: z
+      .enum(["defer", "skip", "none"])
+      .optional()
+      .describe(
+        "Action to take on pending items: 'defer' (move to next week), 'skip' (mark as skipped), or 'none'."
+      ),
     commit_next_week: z
       .boolean()
       .optional()
@@ -233,6 +239,28 @@ export const submitWPRTool: AgentTool = {
         .single();
 
       if (!activeCycle) throw new Error("No active cycle found.");
+
+      // 1.5 Handle Pending Items (if action specified)
+      let pendingMessage = "";
+      if (params.pending_action && params.pending_action !== "none") {
+        const status =
+          params.pending_action === "defer" ? "deferred" : "skipped";
+
+        const { data: pendingItems, error: pendingError } =
+          await context.supabase
+            .from("tactic_instances")
+            .update({ status })
+            .eq("org_id", context.orgId)
+            .eq("week_start", params.week_start)
+            .eq("status", "pending")
+            .select();
+
+        if (pendingError) throw pendingError;
+        
+        if (pendingItems && pendingItems.length > 0) {
+            pendingMessage = ` Updated ${pendingItems.length} pending items to '${status}'.`;
+        }
+      }
 
       // 2. Recalculate Lead Score (Server-Side Validation)
       const { data: instances } = await context.supabase
@@ -397,7 +425,7 @@ Notes: ${params.notes}`;
         success: true,
         data: {
           wpr,
-          message: `✅ WPR submitted. Score: ${calculatedLeadScore}%.${nextWeekMessage} Email summary sent.`,
+          message: `✅ WPR submitted. Score: ${calculatedLeadScore}%.${pendingMessage}${nextWeekMessage} Email summary sent.`,
         },
       };
     } catch (error: any) {
