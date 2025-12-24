@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
-import { getWeekStart } from "@/utils/planning";
+import { getWeekStart, generateTacticInstancesForWeek } from "@/utils/planning";
 import { logAgentAction } from "../audit-service";
 import { embeddingService } from "../embedding-service";
 import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/lib/domain/scoring";
@@ -10,7 +10,7 @@ import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/l
  */
 export const getWPRContextTool: AgentTool = {
   name: "get_wpr_context",
-  description: "Gather all necessary data to conduct a Weekly Progress Review (WPR). Returns the calculated Lead Score, Tactic completion status, and Goal status for the specified week.",
+  description: "Gather all necessary data to conduct a Weekly Progress Review (WPR). Returns the calculated Lead Score, detailed status of all tactics (completed, pending, deferred), and Goal status.",
   category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
@@ -19,6 +19,11 @@ export const getWPRContextTool: AgentTool = {
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
       const weekStart = params.week_start || getWeekStart().toISOString().split('T')[0];
+      
+      // Calculate next week start for preview
+      const nextWeekDate = new Date(weekStart);
+      nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+      const nextWeekStart = nextWeekDate.toISOString().split('T')[0];
 
       // 1. Get Active Cycle
       const { data: activeCycle } = await context.supabase
@@ -36,7 +41,7 @@ export const getWPRContextTool: AgentTool = {
       const { data: instances } = await context.supabase
         .from("tactic_instances")
         .select(`
-          id, status, planned,
+          id, status, planned, due_date, notes,
           tactics ( id, title, weight, goal_id )
         `)
         .eq("org_id", context.orgId)
@@ -54,12 +59,11 @@ export const getWPRContextTool: AgentTool = {
       const leadScore = calculateLeadScore(scorableItems);
       const performance = getPerformanceStatus(leadScore);
 
-      // Prepare details for the agent
-      const tacticDetails = (instances || []).map((inst: any) => ({
-        title: inst.tactics?.title,
-        status: inst.status,
-        weight: inst.tactics?.weight || 1.0
-      }));
+      // Group items for the agent
+      const completed = (instances || []).filter((i: any) => i.status === 'done');
+      const pending = (instances || []).filter((i: any) => i.status === 'pending');
+      const deferred = (instances || []).filter((i: any) => i.status === 'deferred');
+      const skipped = (instances || []).filter((i: any) => i.status === 'skipped');
 
       // 4. Get Goals Status
       const { data: goals } = await context.supabase
@@ -67,21 +71,42 @@ export const getWPRContextTool: AgentTool = {
         .select("id, title, status, target, baseline, unit")
         .eq("cycle_id", activeCycle.id);
 
+      // 5. Preview Next Week (Check if instances exist)
+      const { count: nextWeekCount } = await context.supabase
+        .from("tactic_instances")
+        .select('id', { count: 'exact', head: true })
+        .eq("org_id", context.orgId)
+        .eq("week_start", nextWeekStart)
+        .eq("planned", true);
+
       return {
         success: true,
         data: {
           weekStart,
+          nextWeekStart,
           cycle: activeCycle.title,
           leadScore,
           performance,
           stats: {
-            totalTactics: instances?.length || 0,
-            completedTactics: instances?.filter((i: any) => i.status === 'done').length || 0,
+            total: instances?.length || 0,
+            completed: completed.length,
+            pending: pending.length,
+            deferred: deferred.length,
+            skipped: skipped.length,
             completionRate: `${leadScore}%`
           },
-          tacticDetails,
+          details: {
+            completed: completed.map((i: any) => ({ title: i.tactics.title, id: i.id })),
+            pending: pending.map((i: any) => ({ title: i.tactics.title, id: i.id, due: i.due_date })),
+            deferred: deferred.map((i: any) => ({ title: i.tactics.title, id: i.id, notes: i.notes })),
+            skipped: skipped.map((i: any) => ({ title: i.tactics.title, id: i.id }))
+          },
           goals: goals || [],
-          message: `WPR Context loaded. Lead Score: ${leadScore}% (${performance}).`
+          nextWeekPlan: {
+            status: nextWeekCount && nextWeekCount > 0 ? "generated" : "empty",
+            itemCount: nextWeekCount || 0
+          },
+          message: `WPR Context loaded. Score: ${leadScore}% (${performance}). ${pending.length} pending items to review.`
         }
       };
     } catch (error: any) {
@@ -95,13 +120,14 @@ export const getWPRContextTool: AgentTool = {
  */
 export const submitWPRTool: AgentTool = {
   name: "submit_wpr",
-  description: "Finalize and save a Weekly Progress Review (WPR). Records the score, notes, and decisions.",
+  description: "Finalize and save a Weekly Progress Review (WPR). Records the score, notes, and decisions. Can also generate/commit the plan for the next week.",
   category: "action",
   requiresConfirmation: true,
   parameters: z.object({
     week_start: z.string().describe("The start date of the week being reviewed (YYYY-MM-DD)."),
     notes: z.string().describe("Qualitative notes, decisions, and analysis of the week."),
     lag_status: z.string().describe("Summary of goal status (e.g., 'All on track')."),
+    commit_next_week: z.boolean().optional().describe("If true, generates and activates the plan for the next week."),
   }),
   handler: async (params, context: ToolContext): Promise<ToolResult> => {
     try {
@@ -116,7 +142,6 @@ export const submitWPRTool: AgentTool = {
       if (!activeCycle) throw new Error("No active cycle found.");
 
       // 2. Recalculate Lead Score (Server-Side Validation)
-      // We do NOT trust the agent's passed score. We recalculate it from the DB.
       const { data: instances } = await context.supabase
         .from("tactic_instances")
         .select(`
@@ -199,26 +224,67 @@ Notes: ${params.notes}`;
         context.orgId!
       );
 
-      // 5. Audit Log
+      // 5. Handle Next Week Generation
+      let nextWeekMessage = "";
+      if (params.commit_next_week) {
+        const nextWeekDate = new Date(params.week_start);
+        nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+        const nextWeekStart = nextWeekDate.toISOString().split('T')[0];
+
+        // Get all active tactics
+        const { data: tactics } = await context.supabase
+          .from("tactics")
+          .select("id")
+          .eq("org_id", context.orgId)
+          .eq("status", "active");
+
+        if (tactics && tactics.length > 0) {
+          let generatedCount = 0;
+          for (const tactic of tactics) {
+            // Check if instances already exist for this tactic next week
+            const { count } = await context.supabase
+              .from("tactic_instances")
+              .select("id", { count: 'exact', head: true })
+              .eq("tactic_id", tactic.id)
+              .eq("week_start", nextWeekStart);
+            
+            if (count === 0) {
+              await generateTacticInstancesForWeek(
+                context.supabase,
+                tactic.id,
+                nextWeekDate,
+                context.orgId!
+              );
+              generatedCount++;
+            }
+          }
+          nextWeekMessage = ` Generated plan for next week (${nextWeekStart}).`;
+        }
+      }
+
+      // Log agent action
       await logAgentAction(context.supabase, {
-        org_id: context.orgId!,
-        actor_user_id: context.userId!,
-        action: "agent_tool_call",
-        entity_type: "wpr",
-        entity_id: wpr.id,
-        details: {
-          tool: "submit_wpr",
-          action: actionType,
-          score: calculatedLeadScore
+        userId: context.userId,
+        orgId: context.orgId!,
+        toolName: "submit_wpr",
+        action: actionType as "create" | "update",
+        entityType: "wpr",
+        entityId: wpr.id,
+        afterState: wpr,
+        metadata: {
+          confirmed: true,
+          score: calculatedLeadScore,
+          next_week_committed: params.commit_next_week
         }
       });
 
       return {
         success: true,
-        data: wpr,
-        message: `Weekly Review ${actionType}d successfully. Validated Score: ${calculatedLeadScore}%.`
+        data: {
+          wpr,
+          message: `✅ WPR submitted. Score: ${calculatedLeadScore}%.${nextWeekMessage}`,
+        }
       };
-
     } catch (error: any) {
       return { success: false, error: error.message };
     }
