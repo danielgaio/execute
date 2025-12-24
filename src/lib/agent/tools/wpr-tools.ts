@@ -4,6 +4,7 @@ import { getWeekStart } from "@/utils/planning";
 import { generateInstancesForTacticId } from "@/lib/domain/planning";
 import { logAgentAction } from "../audit-service";
 import { embeddingService } from "../embedding-service";
+import { EmailService } from "@/lib/email/service";
 import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/lib/domain/scoring";
 
 /**
@@ -278,11 +279,30 @@ Notes: ${params.notes}`;
         }
       });
 
+      // Send Email Summary
+      // Fetch user email first
+      const { data: userProfile } = await context.supabase
+        .from("profiles")
+        .select("email, full_name")
+        .eq("id", context.userId)
+        .single();
+
+      if (userProfile && userProfile.email) {
+        await EmailService.sendWPRSummary(
+          userProfile.email,
+          userProfile.full_name || "User",
+          params.week_start,
+          calculatedLeadScore,
+          params.lag_status,
+          params.notes
+        );
+      }
+
       return {
         success: true,
         data: {
           wpr,
-          message: `✅ WPR submitted. Score: ${calculatedLeadScore}%.${nextWeekMessage}`,
+          message: `✅ WPR submitted. Score: ${calculatedLeadScore}%.${nextWeekMessage} Email summary sent.`,
         }
       };
     } catch (error: any) {

@@ -51,16 +51,18 @@ export class EmailService {
   }
 
   /**
-   * Send a notification about low execution score.
+   * Send a summary of the Weekly Progress Review.
    */
-  static async sendLowScoreAlert(
+  static async sendWPRSummary(
     to: string,
     name: string,
     weekStart: string,
-    score: number
+    score: number,
+    lagStatus: string,
+    notes: string
   ): Promise<EmailResult> {
     if (!resend) {
-      console.log(`[Mock Email] To: ${to} | Subject: Low Score Alert | Score: ${score}`);
+      console.log(`[Mock Email] To: ${to} | Subject: WPR Summary | Score: ${score}`);
       return { success: true };
     }
 
@@ -68,16 +70,24 @@ export class EmailService {
       const { data, error } = await resend.emails.send({
         from: EMAIL_FROM,
         to,
-        subject: `⚠️ At Risk: Execution Score ${score}%`,
+        subject: `Weekly Review Summary: ${weekStart} (${score}%)`,
         html: `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Hello ${name},</h2>
-            <p>Your execution score for the week of ${weekStart} was <strong>${score}%</strong>.</p>
-            <p>This is below the recommended threshold of 85%. Consistent execution is key to achieving your goals.</p>
-            <div style="margin: 20px 0;">
-              <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="background-color: #d32f2f; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Analyze & Recover</a>
+            <h2>Weekly Progress Review</h2>
+            <p><strong>Week of:</strong> ${weekStart}</p>
+            <p><strong>Execution Score:</strong> ${score}%</p>
+            <p><strong>Goal Status:</strong> ${lagStatus}</p>
+            
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Notes & Decisions</h3>
+              <p style="white-space: pre-wrap;">${notes}</p>
             </div>
-            <p>Ask the Agent: <em>"Why was my score low last week?"</em> to get insights.</p>
+
+            <div style="margin: 20px 0;">
+              <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard" style="background-color: #000; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Dashboard</a>
+            </div>
+            <hr />
+            <p style="color: #666; font-size: 12px;">Execute - Agent-First Productivity</p>
           </div>
         `,
       });
