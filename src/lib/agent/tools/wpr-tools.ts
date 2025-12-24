@@ -6,13 +6,14 @@ import { logAgentAction } from "../audit-service";
 import { embeddingService } from "../embedding-service";
 import { EmailService } from "@/lib/email/service";
 import { calculateLeadScore, getPerformanceStatus, type ScorableItem } from "@/lib/domain/scoring";
+import { calculateGoalProgress, determineGoalStatus, type Goal } from "@/lib/domain/goals";
 
 /**
  * Get context for a Weekly Progress Review (WPR)
  */
 export const getWPRContextTool: AgentTool = {
   name: "get_wpr_context",
-  description: "Gather all necessary data to conduct a Weekly Progress Review (WPR). Returns the calculated Lead Score, detailed status of all tactics (completed, pending, deferred), and Goal status.",
+  description: "Gather all necessary data to conduct a Weekly Progress Review (WPR). Returns the calculated Lead Score, detailed status of all tactics (completed, pending, deferred), and Goal status (Lag Indicators).",
   category: "analysis",
   requiresConfirmation: false,
   parameters: z.object({
@@ -67,11 +68,37 @@ export const getWPRContextTool: AgentTool = {
       const deferred = (instances || []).filter((i: any) => i.status === 'deferred');
       const skipped = (instances || []).filter((i: any) => i.status === 'skipped');
 
-      // 4. Get Goals Status
-      const { data: goals } = await context.supabase
+      // 4. Get Goals Status (Lag Indicators)
+      const { data: goalsData } = await context.supabase
         .from("goals")
-        .select("id, title, status, target, baseline, unit")
+        .select("id, title, status, target, baseline, unit, current_value, target_date")
         .eq("cycle_id", activeCycle.id);
+
+      // Calculate cycle progress for goal status determination
+      const totalDays = Math.ceil((new Date(activeCycle.end_date).getTime() - new Date(activeCycle.start_date).getTime()) / (1000 * 60 * 60 * 24));
+      const daysElapsed = Math.ceil((new Date().getTime() - new Date(activeCycle.start_date).getTime()) / (1000 * 60 * 60 * 24));
+      const cycleProgress = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
+
+      const goals = (goalsData || []).map((g: any) => {
+        const goal: Goal = {
+          ...g,
+          start_date: activeCycle.start_date,
+          target_date: g.target_date || activeCycle.end_date
+        };
+        const progress = calculateGoalProgress(goal);
+        const calculatedStatus = determineGoalStatus(goal, cycleProgress);
+        
+        return {
+          id: g.id,
+          title: g.title,
+          current: g.current_value ?? g.baseline,
+          target: g.target,
+          unit: g.unit,
+          progress: `${progress}%`,
+          status: calculatedStatus, // 'on_track', 'at_risk', etc.
+          originalStatus: g.status // Keep the manual status just in case
+        };
+      });
 
       // 5. Preview Next Week (Check if instances exist)
       const { count: nextWeekCount } = await context.supabase

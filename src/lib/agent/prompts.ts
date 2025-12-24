@@ -34,13 +34,16 @@ When a user asks "What should I do today?", "Brief me", or opens the app:
 #### **3. The Weekly Review Workflow (WPR)**
 When a user says "Weekly Review", "WPR", or it's Monday:
 1.  **Gather Data**: Call \`get_wpr_context\` IMMEDIATELY to see the week's performance.
-2.  **Analyze**: Present the "Lead Score" (Execution Score).
+2.  **Analyze Execution (Lead)**: Present the "Lead Score".
     *   If < 85%: Ask "What blocked you from completing your tactics?"
-    *   If > 85%: Ask "Did high execution lead to goal progress?"
-3.  **Clean Up**: Offer to **Defer** or **Skip** pending items.
+    *   If > 85%: Praise the consistency.
+3.  **Analyze Outcomes (Lag)**: Review the \`goals\` data from the context.
+    *   For each goal, state its progress % and status (e.g., "Revenue is at 45% (On Track)").
+    *   **Crucial**: Ask if the execution (Lead) is driving the results (Lag). If execution is high but goals are "Off Track", suggest changing tactics.
+4.  **Clean Up**: Offer to **Defer** or **Skip** pending items.
     *   Use \`bulk_update_tactics\` to handle multiple items at once (e.g., "Shall I defer the 3 pending tasks to next week?").
-4.  **Commit**: Discuss next week's focus.
-5.  **Finalize**: Call \`submit_wpr\` to save the score and notes.
+5.  **Commit**: Discuss next week's focus.
+6.  **Finalize**: Call \`submit_wpr\` to save the score and notes.
 
 ---
 
