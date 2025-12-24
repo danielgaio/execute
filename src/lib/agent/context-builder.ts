@@ -2,6 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { getWeekStart } from "@/utils/planning";
 import { calculateLeadScore, type ScorableItem } from "@/lib/domain/scoring";
 import { getRecentAuditActivity } from "./audit-service";
+import { parseVisionMarkdown, ParsedVision } from "@/lib/domain/vision";
 
 export interface AgentContextData {
   activeCycle?: {
@@ -10,7 +11,8 @@ export interface AgentContextData {
     endDate: string;
     daysLeft: number;
   };
-  vision?: string;
+  vision?: string; // Raw markdown
+  parsedVision?: ParsedVision; // Structured data
   goals?: {
     title: string;
     status: string;
@@ -93,6 +95,7 @@ export class ContextBuilder {
 
     if (vision) {
       context.vision = vision.content_md;
+      context.parsedVision = parseVisionMarkdown(vision.content_md);
     }
 
     // 3. Get Weekly Score & Task Stats
@@ -180,7 +183,15 @@ export class ContextBuilder {
   formatContext(data: AgentContextData): string {
     let prompt = "\n\n--- CURRENT EXECUTION CONTEXT ---\n";
 
-    if (data.vision) {
+    if (data.parsedVision) {
+      const v = data.parsedVision;
+      prompt += "### STRATEGIC VISION\n";
+      if (v.longTerm) prompt += `Long-Term: ${v.longTerm}\n`;
+      if (v.threeYear) prompt += `3-Year: ${v.threeYear}\n`;
+      if (v.twelveMonth) prompt += `12-Month Goals: ${v.twelveMonth}\n`;
+      if (v.coreValues) prompt += `Core Values: ${v.coreValues.join(", ")}\n`;
+      prompt += "\n";
+    } else if (data.vision) {
       const visionSnippet = data.vision.length > 500 ? data.vision.substring(0, 500) + "..." : data.vision;
       prompt += `Organization Vision: "${visionSnippet}"\n`;
     } else {

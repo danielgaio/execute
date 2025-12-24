@@ -32,7 +32,9 @@ import { useTransition } from "react";
 import DailyBriefingButton from "./daily-briefing-button";
 import GoalsCard from "./goals-card";
 import QuickAddTask from "./quick-add-task";
+import VisionCard from "./vision-card";
 import { Goal } from "@/lib/domain/goals";
+import { ParsedVision } from "@/lib/domain/vision";
 
 interface ExecutionDashboardProps {
   activeCycle: any;
@@ -40,6 +42,7 @@ interface ExecutionDashboardProps {
   todaysInstances: any[];
   overdueInstances: any[];
   goals: Goal[];
+  vision: ParsedVision | null;
 }
 
 export default function ExecutionDashboard({
@@ -48,6 +51,7 @@ export default function ExecutionDashboard({
   todaysInstances,
   overdueInstances,
   goals,
+  vision,
 }: ExecutionDashboardProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -118,37 +122,9 @@ export default function ExecutionDashboard({
       </Grid>
 
 
-      {/* Cycle Progress Card */}
+      {/* Vision Card (Replaces Cycle Progress for now, or we can move Cycle Progress elsewhere) */}
       <Grid item xs={12} md={4}>
-        <Card sx={{ height: "100%" }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              CYCLE PROGRESS
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <CalendarIcon color="action" sx={{ mr: 1 }} />
-              <Typography variant="h5" fontWeight="bold">
-                Week {Math.ceil((totalDays - daysRemaining) / 7)} of {Math.ceil(totalDays / 7)}
-              </Typography>
-            </Box>
-            <Stack spacing={1}>
-              <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-                <Typography variant="body2">Time Elapsed</Typography>
-                <Typography variant="body2" fontWeight="bold">
-                  {Math.round(cycleProgress)}%
-                </Typography>
-              </Box>
-              <LinearProgress
-                variant="determinate"
-                value={cycleProgress}
-                sx={{ height: 8, borderRadius: 4 }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                {daysRemaining} days remaining in this cycle
-              </Typography>
-            </Stack>
-          </CardContent>
-        </Card>
+        <VisionCard vision={vision} />
       </Grid>
 
       {/* Goals Card (Lag Indicators) */}

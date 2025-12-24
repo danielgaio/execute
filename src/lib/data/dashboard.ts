@@ -2,6 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { getWeekStart } from "@/utils/planning";
 import { calculateLeadScore, ScorableItem } from "@/lib/domain/scoring";
 import { Goal } from "@/lib/domain/goals";
+import { parseVisionMarkdown, ParsedVision } from "@/lib/domain/vision";
 
 export interface DashboardData {
   activeCycle: any | null;
@@ -10,6 +11,7 @@ export interface DashboardData {
   overdueInstances: any[];
   weekStart: string;
   goals: Goal[];
+  vision: ParsedVision | null;
 }
 
 export async function getDashboardData(
@@ -41,6 +43,20 @@ export async function getDashboardData(
         target_date: g.target_date || activeCycle.end_date
       }));
     }
+  }
+
+  // 2b. Fetch Vision
+  let vision: ParsedVision | null = null;
+  const { data: visionData } = await supabase
+    .from("visions")
+    .select("content_md")
+    .eq("org_id", orgId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (visionData) {
+    vision = parseVisionMarkdown(visionData.content_md);
   }
 
   // 3. Fetch Today's Instances
@@ -106,5 +122,6 @@ export async function getDashboardData(
     overdueInstances: overdueInstances || [],
     weekStart,
     goals,
+    vision,
   };
 }
