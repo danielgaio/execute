@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Box,
-  Tabs,
-  Tab,
-  Typography,
-  Container,
-} from "@mui/material";
+import { Box, Tabs, Tab, Typography, Container } from "@mui/material";
 import {
   Person as PersonIcon,
   Business as BusinessIcon,
@@ -17,6 +11,7 @@ import {
 import SettingsForm from "@/app/dashboard/settings/settings-form";
 import OrgMembersList from "./org-members-list";
 import InvitationsList from "./invitations-list";
+import InviteMemberForm from "./invite-member-form";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -51,6 +46,7 @@ interface SettingsTabsProps {
   organization: any;
   orgMembers: any[];
   pendingInvitations: any[];
+  teams?: { id: string; name: string }[];
 }
 
 export default function SettingsTabs({
@@ -58,6 +54,7 @@ export default function SettingsTabs({
   organization,
   orgMembers,
   pendingInvitations,
+  teams = [],
 }: SettingsTabsProps) {
   const [value, setValue] = useState(0);
 
@@ -108,11 +105,19 @@ export default function SettingsTabs({
           </TabPanel>
 
           <TabPanel value={value} index={2}>
-            <OrgMembersList members={orgMembers} organizationId={organization.id} currentUserId={profile.id} />
+            <OrgMembersList
+              members={orgMembers}
+              organizationId={organization.id}
+              currentUserId={profile.id}
+            />
           </TabPanel>
 
           <TabPanel value={value} index={3}>
-            <InvitationsList invitations={pendingInvitations} organizationId={organization.id} />
+            <InviteMemberForm organizationId={organization.id} teams={teams} />
+            <InvitationsList
+              invitations={pendingInvitations}
+              organizationId={organization.id}
+            />
           </TabPanel>
         </>
       )}
