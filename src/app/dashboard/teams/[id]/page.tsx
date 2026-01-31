@@ -50,10 +50,11 @@ export default async function TeamDetailPage({
     .eq("user_id", user.id)
     .single();
 
-  const canManage =
+  const canManage = Boolean(
     orgMembership &&
     (["owner", "manager"].includes(orgMembership.role) ||
-      teamMembership?.role === "manager");
+      teamMembership?.role === "manager"),
+  );
 
   // Fetch team members
   const { members: teamMembers } = await listTeamMembers(supabase, team_id);
@@ -63,7 +64,7 @@ export default async function TeamDetailPage({
 
   // Filter out members already in team
   const availableMembers = orgMembers.filter(
-    (om) => !teamMembers.some((tm) => tm.user_id === om.user_id)
+    (om) => !teamMembers.some((tm) => tm.user_id === om.user_id),
   );
 
   return (

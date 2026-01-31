@@ -36,8 +36,9 @@ export default async function TeamsPage() {
     .eq("user_id", user.id)
     .single();
 
-  const canCreateTeams =
-    membership && ["owner", "manager"].includes(membership.role);
+  const canCreateTeams = Boolean(
+    membership && ["owner", "manager"].includes(membership.role),
+  );
 
   // Fetch teams
   const { teams, error } = await listTeams(supabase, activeOrgId);

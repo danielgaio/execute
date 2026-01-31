@@ -72,7 +72,7 @@ export default function TeamMembersList({
 
   const handleMenuClick = (
     event: React.MouseEvent<HTMLElement>,
-    member: (typeof members)[0]
+    member: (typeof members)[0],
   ) => {
     setAnchorEl(event.currentTarget);
     setSelectedMember(member);
@@ -90,11 +90,12 @@ export default function TeamMembersList({
     setError(null);
 
     try {
-      const { updateTeamMemberRoleAction } = await import("../actions");
+      const { updateTeamMemberRoleAction } =
+        await import("@/app/dashboard/teams/actions");
       const result = await updateTeamMemberRoleAction(
         team.id,
         selectedMember.user_id,
-        newRole
+        newRole,
       );
 
       if (result.error) {
@@ -117,10 +118,11 @@ export default function TeamMembersList({
     setError(null);
 
     try {
-      const { removeTeamMemberAction } = await import("../actions");
+      const { removeTeamMemberAction } =
+        await import("@/app/dashboard/teams/actions");
       const result = await removeTeamMemberAction(
         team.id,
-        selectedMember.user_id
+        selectedMember.user_id,
       );
 
       if (result.error) {
@@ -144,11 +146,12 @@ export default function TeamMembersList({
     setError(null);
 
     try {
-      const { addTeamMemberAction } = await import("../actions");
+      const { addTeamMemberAction } =
+        await import("@/app/dashboard/teams/actions");
       const result = await addTeamMemberAction(
         team.id,
         selectedUserId,
-        selectedRole
+        selectedRole,
       );
 
       if (result.error) {

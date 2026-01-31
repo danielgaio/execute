@@ -69,10 +69,7 @@ export default function InvitationsList({
     setError(null);
     setSuccess(null);
 
-    const formData = new FormData();
-    formData.append("invitation_id", selectedInvitation.id);
-
-    const result = await revokeInvitationAction(formData);
+    const result = await revokeInvitationAction(selectedInvitation.id);
 
     if (result?.error) {
       setError(result.error);
@@ -87,10 +84,7 @@ export default function InvitationsList({
     setError(null);
     setSuccess(null);
 
-    const formData = new FormData();
-    formData.append("invitation_id", invitationId);
-
-    const result = await resendInvitationAction(formData);
+    const result = await resendInvitationAction(invitationId);
 
     if (result?.error) {
       setError(result.error);

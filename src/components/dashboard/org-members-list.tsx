@@ -58,12 +58,11 @@ export default function OrgMembersList({
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setError(null);
-    const formData = new FormData();
-    formData.append("org_id", organizationId);
-    formData.append("user_id", userId);
-    formData.append("new_role", newRole);
-
-    const result = await updateOrgMemberRoleAction(formData);
+    const result = await updateOrgMemberRoleAction(
+      organizationId,
+      userId,
+      newRole as "owner" | "manager" | "member" | "viewer",
+    );
     if (result?.error) {
       setError(result.error);
     }

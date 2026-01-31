@@ -56,7 +56,8 @@ export default function TeamsList({
     if (description) formData.append("description", description);
 
     try {
-      const { createTeamAction } = await import("./actions");
+      const { createTeamAction } =
+        await import("@/app/dashboard/teams/actions");
       const result = await createTeamAction(formData);
 
       if (result.error) {
@@ -122,7 +123,7 @@ export default function TeamsList({
       ) : (
         <Grid container spacing={3}>
           {teams.map((team) => (
-            <Grid item xs={12} sm={6} md={4} key={team.id}>
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={team.id}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
