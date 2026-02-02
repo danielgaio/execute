@@ -2,6 +2,14 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { BriefingService } from "../../briefing/service";
 
+// Schema defined separately for type inference
+const briefingSchema = z.object({
+  timezone: z
+    .string()
+    .optional()
+    .describe("User's timezone (e.g., 'America/New_York'). Defaults to UTC."),
+});
+
 /**
  * Get a comprehensive daily briefing
  */
@@ -11,18 +19,17 @@ export const getDailyBriefingTool: AgentTool = {
     "Get a comprehensive daily briefing. Includes overdue items, today's focus, and a heads-up for the next 3 days. Use this to help the user prioritize their day.",
   category: "analysis",
   requiresConfirmation: false,
-  parameters: z.object({
-    timezone: z
-      .string()
-      .optional()
-      .describe("User's timezone (e.g., 'America/New_York'). Defaults to UTC."),
-  }),
-  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+  parameters: briefingSchema,
+  handler: async (
+    params: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
     try {
+      const { timezone } = params as z.infer<typeof briefingSchema>;
       const briefing = await BriefingService.getBriefing(
         context.supabase,
         context.orgId!,
-        params.timezone
+        timezone
       );
 
       // Format message for the agent

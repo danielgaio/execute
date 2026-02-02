@@ -95,9 +95,14 @@ export async function createInvitation(
       .select("id, profile:profiles(email)")
       .eq("org_id", params.org_id);
 
-    const isAlreadyMember = existingMember?.some(
-      (m) => m.profile?.email?.toLowerCase() === params.email.toLowerCase()
-    );
+    // Type assertion - Supabase returns profile as array when using the relation syntax
+    // but with single FK it's typically an object. Using defensive access pattern.
+    const isAlreadyMember = existingMember?.some((m) => {
+      const profile = m.profile as unknown as { email: string } | { email: string }[] | null;
+      if (!profile) return false;
+      const email = Array.isArray(profile) ? profile[0]?.email : profile.email;
+      return email?.toLowerCase() === params.email.toLowerCase();
+    });
 
     if (isAlreadyMember) {
       return { invitation: null, error: "User is already a member" };

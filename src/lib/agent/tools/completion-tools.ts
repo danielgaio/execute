@@ -2,6 +2,23 @@ import { z } from "zod";
 import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { logAgentAction, captureEntityState } from "../audit-service";
 
+// Schema defined separately for type inference
+const completeTacticSchema = z.object({
+  tactic_name: z.string().describe("The name or title of the tactic to complete"),
+  notes: z.string().optional().describe("Optional notes about the completion"),
+});
+
+// Type for tactic instance with joined tactic
+interface TacticInstance {
+  id: string;
+  due_date: string;
+  status: string;
+  tactics: {
+    id: string;
+    title: string;
+  };
+}
+
 /**
  * Complete a tactic by name (fuzzy match)
  */
@@ -11,13 +28,13 @@ export const completeTacticByNameTool: AgentTool = {
     "Mark a tactic as complete by providing its name or title. Useful when the user says 'I finished the report' without an ID. It will search for pending items due recently.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    tactic_name: z.string().describe("The name or title of the tactic to complete"),
-    notes: z.string().optional().describe("Optional notes about the completion"),
-  }),
-  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+  parameters: completeTacticSchema,
+  handler: async (
+    params: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
     try {
-      const searchTerm = params.tactic_name as string;
+      const { tactic_name: searchTerm, notes } = params as z.infer<typeof completeTacticSchema>;
       
       // 1. Find pending instances that match the name
       // We look for items due in the last 7 days or next 7 days to be safe
@@ -52,17 +69,19 @@ export const completeTacticByNameTool: AgentTool = {
         };
       }
 
-      if (candidates.length > 1) {
+      // Cast to proper type - Supabase returns tactics as object when using !inner
+      const typedCandidates = candidates as unknown as TacticInstance[];
+
+      if (typedCandidates.length > 1) {
         // If multiple matches, ask for clarification
-        // But since this is an action tool, we might just fail and list options
-        const options = candidates.map((c: any) => `"${c.tactics.title}" (Due: ${c.due_date})`).join(", ");
+        const options = typedCandidates.map((c) => `"${c.tactics.title}" (Due: ${c.due_date})`).join(", ");
         return {
           success: false,
           error: `Found multiple matching tactics: ${options}. Please specify which one.`,
         };
       }
 
-      const targetInstance = candidates[0];
+      const targetInstance = typedCandidates[0];
 
       // 2. Perform Completion (Reuse logic from mark_tactic_complete)
       // Capture state before modification
@@ -77,7 +96,7 @@ export const completeTacticByNameTool: AgentTool = {
         .update({
           status: "done",
           completed_at: new Date().toISOString(),
-          notes: params.notes || null,
+          notes: notes || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", targetInstance.id)
@@ -97,7 +116,7 @@ export const completeTacticByNameTool: AgentTool = {
         afterState: { ...targetInstance, status: "done" },
         metadata: {
           confirmed: true,
-          completion_notes: params.notes,
+          completion_notes: notes,
           matched_term: searchTerm
         },
       });

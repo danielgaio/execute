@@ -11,7 +11,7 @@
  */
 
 import { z } from "zod";
-import type { AgentTool } from "../types";
+import type { AgentTool, ToolContext, ToolResult } from "../types";
 import {
   createTeam,
   listTeams,
@@ -21,6 +21,7 @@ import {
   removeTeamMember,
   updateMemberRole,
   updateOrgMemberRole,
+  type OrgRole,
 } from "@/lib/domain/teams";
 import {
   createInvitation,
@@ -28,6 +29,82 @@ import {
   revokeInvitation,
 } from "@/lib/domain/invitations";
 import { EmailService } from "@/lib/email/service";
+
+// ============================================================================
+// Schema Definitions (defined separately for type inference)
+// ============================================================================
+
+const listTeamsSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+});
+
+const listTeamMembersSchema = z.object({
+  team_id: z.string().uuid().describe("Team ID"),
+});
+
+const listOrgMembersSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+});
+
+const createTeamSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+  name: z.string().min(1).describe("Team name (e.g., 'Engineering', 'Sales')"),
+  description: z.string().optional().describe("Optional team description"),
+});
+
+const inviteMemberSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+  email: z.string().email().describe("Email address of person to invite"),
+  role: z
+    .enum(["owner", "manager", "member", "viewer"])
+    .describe("Org-level role to assign"),
+  team_ids: z
+    .array(z.string().uuid())
+    .optional()
+    .describe("Optional list of team IDs to add member to"),
+});
+
+const listInvitationsSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+});
+
+const addTeamMemberSchema = z.object({
+  team_id: z.string().uuid().describe("Team ID"),
+  user_id: z.string().uuid().describe("User ID to add (must be org member)"),
+  role: z
+    .enum(["manager", "member", "viewer"])
+    .default("member")
+    .describe("Team role to assign"),
+});
+
+const removeTeamMemberSchema = z.object({
+  team_id: z.string().uuid().describe("Team ID"),
+  user_id: z.string().uuid().describe("User ID to remove"),
+});
+
+const updateTeamMemberRoleSchema = z.object({
+  team_id: z.string().uuid().describe("Team ID"),
+  user_id: z.string().uuid().describe("User ID whose role to change"),
+  new_role: z
+    .enum(["manager", "member", "viewer"])
+    .describe("New role to assign"),
+});
+
+const updateOrgMemberRoleSchema = z.object({
+  org_id: z.string().uuid().describe("Organization ID"),
+  user_id: z.string().uuid().describe("User ID whose role to change"),
+  new_role: z
+    .enum(["owner", "manager", "member", "viewer"])
+    .describe("New org-level role"),
+});
+
+const revokeInvitationSchema = z.object({
+  invitation_id: z.string().uuid().describe("Invitation ID to revoke"),
+});
+
+// ============================================================================
+// Tool Definitions
+// ============================================================================
 
 /**
  * List all teams in the organization
@@ -38,11 +115,13 @@ export const listTeamsTool: AgentTool = {
     "Get all teams in the organization. Useful for understanding team structure and finding team IDs for member operations.",
   category: "query",
   requiresConfirmation: false,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-  }),
-  handler: async (args, context) => {
-    const { teams, error } = await listTeams(context.supabase, args.org_id);
+  parameters: listTeamsSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id } = args as z.infer<typeof listTeamsSchema>;
+    const { teams, error } = await listTeams(context.supabase, org_id);
 
     if (error) {
       return {
@@ -76,7 +155,7 @@ export const listTeamsTool: AgentTool = {
 };
 
 /**
- * List members of a specific team
+ * List all members of a team
  */
 export const listTeamMembersTool: AgentTool = {
   name: "list_team_members",
@@ -84,14 +163,13 @@ export const listTeamMembersTool: AgentTool = {
     "Get all members of a specific team with their roles. Use this to see team composition before making changes.",
   category: "query",
   requiresConfirmation: false,
-  parameters: z.object({
-    team_id: z.string().uuid().describe("Team ID"),
-  }),
-  handler: async (args, context) => {
-    const { members, error } = await listTeamMembers(
-      context.supabase,
-      args.team_id
-    );
+  parameters: listTeamMembersSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { team_id } = args as z.infer<typeof listTeamMembersSchema>;
+    const { members, error } = await listTeamMembers(context.supabase, team_id);
 
     if (error) {
       return {
@@ -134,14 +212,13 @@ export const listOrgMembersTool: AgentTool = {
     "Get all members of the organization with their org-level roles. Use this to see who can be added to teams.",
   category: "query",
   requiresConfirmation: false,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-  }),
-  handler: async (args, context) => {
-    const { members, error } = await listOrgMembers(
-      context.supabase,
-      args.org_id
-    );
+  parameters: listOrgMembersSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id } = args as z.infer<typeof listOrgMembersSchema>;
+    const { members, error } = await listOrgMembers(context.supabase, org_id);
 
     if (error) {
       return {
@@ -174,19 +251,18 @@ export const createTeamTool: AgentTool = {
     "Create a new team within the organization. Only owners and managers can create teams. The creator automatically becomes a team manager.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-    name: z
-      .string()
-      .min(1)
-      .describe("Team name (e.g., 'Engineering', 'Sales')"),
-    description: z.string().optional().describe("Optional team description"),
-  }),
-  handler: async (args, context) => {
+  parameters: createTeamSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id, name, description } = args as z.infer<
+      typeof createTeamSchema
+    >;
     const { team, error } = await createTeam(context.supabase, {
-      org_id: args.org_id,
-      name: args.name,
-      description: args.description,
+      org_id,
+      name,
+      description,
     });
 
     if (error) {
@@ -199,7 +275,7 @@ export const createTeamTool: AgentTool = {
     return {
       success: true,
       data: {
-        message: `Team "${args.name}" created successfully! You are now a manager of this team.`,
+        message: `Team "${name}" created successfully! You are now a manager of this team.`,
         team_id: team?.id,
         team_name: team?.name,
       },
@@ -216,23 +292,19 @@ export const inviteMemberTool: AgentTool = {
     "Send an email invitation for someone to join the organization. Only owners and managers can invite. The invitation expires in 7 days.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-    email: z.string().email().describe("Email address of person to invite"),
-    role: z
-      .enum(["owner", "manager", "member", "viewer"])
-      .describe("Org-level role to assign"),
-    team_ids: z
-      .array(z.string().uuid())
-      .optional()
-      .describe("Optional list of team IDs to add member to"),
-  }),
-  handler: async (args, context) => {
+  parameters: inviteMemberSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id, email, role, team_ids } = args as z.infer<
+      typeof inviteMemberSchema
+    >;
     const { invitation, error } = await createInvitation(context.supabase, {
-      org_id: args.org_id,
-      email: args.email,
-      role: args.role,
-      team_ids: args.team_ids,
+      org_id,
+      email,
+      role,
+      team_ids,
     });
 
     if (error || !invitation) {
@@ -246,7 +318,7 @@ export const inviteMemberTool: AgentTool = {
     const { data: org } = await context.supabase
       .from("organizations")
       .select("name")
-      .eq("id", args.org_id)
+      .eq("id", org_id)
       .single();
 
     const {
@@ -260,17 +332,17 @@ export const inviteMemberTool: AgentTool = {
 
     // Send invitation email
     await EmailService.sendInvitation(
-      args.email,
+      email,
       org?.name || "Execute Organization",
       profile?.full_name || "A team member",
-      args.role,
+      role,
       invitation.token
     );
 
     return {
       success: true,
       data: {
-        message: `Invitation sent to ${args.email}! They have 7 days to accept.`,
+        message: `Invitation sent to ${email}! They have 7 days to accept.`,
         invitation_id: invitation.id,
       },
     };
@@ -286,13 +358,15 @@ export const listInvitationsTool: AgentTool = {
     "Get all pending (not yet accepted) invitations for the organization. Only owners and managers can view invitations.",
   category: "query",
   requiresConfirmation: false,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-  }),
-  handler: async (args, context) => {
+  parameters: listInvitationsSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id } = args as z.infer<typeof listInvitationsSchema>;
     const { invitations, error } = await listPendingInvitations(
       context.supabase,
-      args.org_id
+      org_id
     );
 
     if (error) {
@@ -337,20 +411,19 @@ export const addTeamMemberTool: AgentTool = {
     "Add an existing org member to a team. User must already be a member of the organization. Only owners, managers, or team managers can add members.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    team_id: z.string().uuid().describe("Team ID"),
-    user_id: z.string().uuid().describe("User ID to add (must be org member)"),
-    role: z
-      .enum(["manager", "member", "viewer"])
-      .default("member")
-      .describe("Team role to assign"),
-  }),
-  handler: async (args, context) => {
+  parameters: addTeamMemberSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { team_id, user_id, role } = args as z.infer<
+      typeof addTeamMemberSchema
+    >;
     const { success, error } = await addTeamMember(
       context.supabase,
-      args.team_id,
-      args.user_id,
-      args.role
+      team_id,
+      user_id,
+      role
     );
 
     if (error) {
@@ -363,7 +436,7 @@ export const addTeamMemberTool: AgentTool = {
     return {
       success: true,
       data: {
-        message: `Member added to team successfully as ${args.role}.`,
+        message: `Member added to team successfully as ${role}.`,
       },
     };
   },
@@ -378,15 +451,16 @@ export const removeTeamMemberTool: AgentTool = {
     "Remove a member from a team. Cannot remove the last manager. Only owners, managers, or team managers can remove members.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    team_id: z.string().uuid().describe("Team ID"),
-    user_id: z.string().uuid().describe("User ID to remove"),
-  }),
-  handler: async (args, context) => {
+  parameters: removeTeamMemberSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { team_id, user_id } = args as z.infer<typeof removeTeamMemberSchema>;
     const { success, error } = await removeTeamMember(
       context.supabase,
-      args.team_id,
-      args.user_id
+      team_id,
+      user_id
     );
 
     if (error) {
@@ -414,19 +488,19 @@ export const updateTeamMemberRoleTool: AgentTool = {
     "Change a team member's role. Cannot demote the last manager. Only owners and org managers can change roles.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    team_id: z.string().uuid().describe("Team ID"),
-    user_id: z.string().uuid().describe("User ID whose role to change"),
-    new_role: z
-      .enum(["manager", "member", "viewer"])
-      .describe("New role to assign"),
-  }),
-  handler: async (args, context) => {
+  parameters: updateTeamMemberRoleSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { team_id, user_id, new_role } = args as z.infer<
+      typeof updateTeamMemberRoleSchema
+    >;
     const { success, error } = await updateMemberRole(
       context.supabase,
-      args.team_id,
-      args.user_id,
-      args.new_role
+      team_id,
+      user_id,
+      new_role
     );
 
     if (error) {
@@ -439,7 +513,7 @@ export const updateTeamMemberRoleTool: AgentTool = {
     return {
       success: true,
       data: {
-        message: `Role updated to ${args.new_role} successfully.`,
+        message: `Role updated to ${new_role} successfully.`,
       },
     };
   },
@@ -454,19 +528,19 @@ export const updateOrgMemberRoleTool: AgentTool = {
     "Change an organization member's org-level role. Cannot change your own role or demote the last owner. Only owners can change roles.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    org_id: z.string().uuid().describe("Organization ID"),
-    user_id: z.string().uuid().describe("User ID whose role to change"),
-    new_role: z
-      .enum(["owner", "manager", "member", "viewer"])
-      .describe("New org-level role"),
-  }),
-  handler: async (args, context) => {
+  parameters: updateOrgMemberRoleSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { org_id, user_id, new_role } = args as z.infer<
+      typeof updateOrgMemberRoleSchema
+    >;
     const { success, error } = await updateOrgMemberRole(
       context.supabase,
-      args.org_id,
-      args.user_id,
-      args.new_role
+      org_id,
+      user_id,
+      new_role as OrgRole
     );
 
     if (error) {
@@ -479,7 +553,7 @@ export const updateOrgMemberRoleTool: AgentTool = {
     return {
       success: true,
       data: {
-        message: `Org role updated to ${args.new_role} successfully.`,
+        message: `Org role updated to ${new_role} successfully.`,
       },
     };
   },
@@ -494,13 +568,15 @@ export const revokeInvitationTool: AgentTool = {
     "Cancel a pending invitation. The invitation link will no longer work. Only owners and managers can revoke invitations.",
   category: "action",
   requiresConfirmation: true,
-  parameters: z.object({
-    invitation_id: z.string().uuid().describe("Invitation ID to revoke"),
-  }),
-  handler: async (args, context) => {
+  parameters: revokeInvitationSchema,
+  handler: async (
+    args: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
+    const { invitation_id } = args as z.infer<typeof revokeInvitationSchema>;
     const { success, error } = await revokeInvitation(
       context.supabase,
-      args.invitation_id
+      invitation_id
     );
 
     if (error) {

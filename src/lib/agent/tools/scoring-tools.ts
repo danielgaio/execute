@@ -3,28 +3,34 @@ import type { AgentTool, ToolContext, ToolResult } from "../types";
 import { calculateLeadScore, type ScorableItem } from "../../domain/scoring";
 import { getWeekStart } from "../../../utils/planning";
 
+// Schema defined separately for type inference
+const weeklyScoreSchema = z.object({
+  week_offset: z
+    .number()
+    .optional()
+    .default(0)
+    .describe(
+      "The week to calculate for, relative to the current week. 0 is current week, -1 is last week, etc."
+    ),
+  team_id: z
+    .string()
+    .optional()
+    .describe("Optional team ID to filter by. If omitted, calculates for the user's personal context."),
+});
+
 export const getWeeklyScoreTool: AgentTool = {
   name: "get_weekly_score",
   description:
     "Calculate the execution score (Lead Score) for a specific week. Returns the percentage score (0-100) and a breakdown of completed vs planned items. Use this to review progress or analyze performance.",
   category: "analysis",
   requiresConfirmation: false,
-  parameters: z.object({
-    week_offset: z
-      .number()
-      .optional()
-      .default(0)
-      .describe(
-        "The week to calculate for, relative to the current week. 0 is current week, -1 is last week, etc."
-      ),
-    team_id: z
-      .string()
-      .optional()
-      .describe("Optional team ID to filter by. If omitted, calculates for the user's personal context."),
-  }),
-  handler: async (params, context: ToolContext): Promise<ToolResult> => {
+  parameters: weeklyScoreSchema,
+  handler: async (
+    params: Record<string, unknown>,
+    context: ToolContext
+  ): Promise<ToolResult> => {
     try {
-      const { week_offset = 0, team_id } = params;
+      const { week_offset = 0, team_id } = params as z.infer<typeof weeklyScoreSchema>;
 
       // Calculate date range
       const now = new Date();
@@ -41,30 +47,13 @@ export const getWeeklyScoreTool: AgentTool = {
       const startStr = targetWeekStart.toISOString().split("T")[0];
       const endStr = targetWeekEnd.toISOString().split("T")[0];
 
-      // Build query
-      let query = context.supabase
-        .from("tactic_instances")
-        .select(
-          `
-          id, status, planned,
-          tactics ( id, title, weight )
-        `
-        )
-        .eq("org_id", context.orgId)
-        .gte("due_date", startStr)
-        .lte("due_date", endStr);
+      // Build query - using explicit any[] type for flexible query building
+      let instances: any[] | null = null;
+      let error: any = null;
 
-      // Apply team filter if provided, otherwise rely on RLS (which usually scopes to user/org)
-      // Note: In a real implementation, we might need to join on team_members or similar if RLS is broad.
-      // For now, we assume the context is already scoped or we filter by team_id if the schema supports it directly on instances or tactics.
-      // Looking at the schema in briefing-tools, instances don't seem to have team_id directly, but tactics might.
-      // Let's assume for MVP we calculate for the user's view.
-      
       if (team_id) {
-        // If tactics has team_id, we can filter. 
-        // Since we are selecting tactics, we can try filtering on the joined table, 
-        // but Supabase syntax for filtering on joined tables is specific: !inner join.
-        query = context.supabase
+        // Query with team filter using inner join
+        const result = await context.supabase
           .from("tactic_instances")
           .select(
             `
@@ -76,15 +65,32 @@ export const getWeeklyScoreTool: AgentTool = {
           .gte("due_date", startStr)
           .lte("due_date", endStr)
           .eq("tactics.team_id", team_id);
+        
+        instances = result.data;
+        error = result.error;
+      } else {
+        // Query without team filter
+        const result = await context.supabase
+          .from("tactic_instances")
+          .select(
+            `
+            id, status, planned,
+            tactics ( id, title, weight )
+          `
+          )
+          .eq("org_id", context.orgId)
+          .gte("due_date", startStr)
+          .lte("due_date", endStr);
+        
+        instances = result.data;
+        error = result.error;
       }
-
-      const { data: instances, error } = await query;
 
       if (error) {
         throw new Error(`Failed to fetch tactic instances: ${error.message}`);
       }
 
-      if (!instances) {
+      if (!instances || instances.length === 0) {
         return {
           success: true,
           data: {

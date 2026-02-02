@@ -26,7 +26,7 @@ if (!supabaseEnvAvailable) {
 }
 
 export const getAdminClient = () => {
-  if (!supabaseEnvAvailable) {
+  if (!supabaseEnvAvailable || !SUPABASE_SERVICE_KEY) {
     throw new Error('Supabase test environment not configured');
   }
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
@@ -38,7 +38,7 @@ export const getAdminClient = () => {
 };
 
 export const getAnonClient = () => {
-  if (!supabaseEnvAvailable) {
+  if (!supabaseEnvAvailable || !SUPABASE_ANON_KEY) {
     throw new Error('Supabase test environment not configured');
   }
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -50,7 +50,7 @@ export const getAnonClient = () => {
 };
 
 export const createTestUser = async (email: string) => {
-  if (!supabaseEnvAvailable) {
+  if (!supabaseEnvAvailable || !SUPABASE_ANON_KEY) {
     throw new Error('Supabase test environment not configured');
   }
   const admin = getAdminClient();
